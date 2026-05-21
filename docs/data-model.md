@@ -1,9 +1,9 @@
-# Data Model
+# Data Model abas
 
 > All collections are namespaced by `user_id`. The demo seeds a single user; the schema generalizes.
 
 ## `transactions`
-
+   
 The raw operational ledger. Ingested from CSV.
 
 ```js
