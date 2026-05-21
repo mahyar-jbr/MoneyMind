@@ -1,0 +1,46 @@
+# Env + secrets
+.env
+.env.local
+.env.*.local
+.gcloud/
+*.pem
+*.key
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+build/
+*.log
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local data
+data/local/
+*.sqlite
+*.db
+
+# Demo artifacts kept large
+demo/raw/
+*.mov
