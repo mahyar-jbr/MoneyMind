@@ -4,6 +4,7 @@
 
 ## Legend
 
+- **Status:** `⬜ todo` · `🟡 wip` · `✅ done (YYYY-MM-DD)` · `🚧 blocked`
 - **Size:** `S` = ½ day · `M` = 1 day · `L` = 2 days · `XL` = 3+ days
 - **Owner:** `@mahyar` (agent) · `@kasra` (backend) · `@aidin` (frontend)
 - **Demo proof:** if this lands, this is what shows up in the demo video. If you can't name a demo proof, the item is busywork — cut it.
@@ -21,18 +22,20 @@
 
 > **Goal:** end-to-end walking skeleton. Push a CSV in, get an agent paragraph out. Schemas locked, contracts agreed.
 
-| #   | Item                                                                                                       | Owner    | Size | Demo proof                              |
-| --- | ---------------------------------------------------------------------------------------------------------- | -------- | ---- | --------------------------------------- |
-| 1   | Atlas cluster + IAM + connection string in `.env.example`                                                  | @mahyar  | S    | Cluster live, all 3 can connect         |
-| 2   | Collections: `transactions`, `goals`, `memories`, `interventions`, `outcomes`, `user_context`              | @mahyar  | M    | Schemas documented in `docs/data-model.md` |
-| 3   | Vector index on `memories.embedding` (Voyage AI auto-embed)                                                | @mahyar  | M    | Insert + similarity query works         |
-| 4   | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                                         | @kasra   | M    | 6mo synthetic data loads cleanly        |
-| 5   | Aggregation: weekly spend by category                                                                      | @kasra   | S    | JSON returned from `/agg/weekly`        |
-| 6   | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                         | @kasra   | L    | `data/synthetic.csv` checked in         |
-| 7   | Next.js scaffold + Clerk auth + dark theme tokens                                                          | @aidin   | M    | Sign in → empty dashboard               |
-| 8   | Chat shell (streaming UI, no agent yet — echo backend)                                                     | @aidin   | M    | Type → tokens stream back               |
-| 9   | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                                | @mahyar  | M    | Hello-world loop runs locally           |
-| 10  | Glue: frontend → `/chat` → agent → MongoDB read → response                                                 | all      | M    | Walking skeleton — CSV → paragraph      |
+| #   | Status | Item                                                                                                       | Owner    | Size | Demo proof                              |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------- | -------- | ---- | --------------------------------------- |
+| 1   | ✅ done (2026-05-21) | Atlas cluster + IAM + connection string in `.env.example`                                | @mahyar  | S    | M0 cluster `moneymind` live in us-east-1, user `moneymind-app` created, network `0.0.0.0/0`, connection string in shared Doc |
+| 2   | 🟡 wip | Collections: `transactions`, `goals`, `memories`, `interventions`, `outcomes`, `user_context`             | @mahyar  | M    | Schemas documented in `docs/data-model.md` ✅, code-side creation TBD via ticket |
+| 3   | ✅ done (2026-05-21) | Vector index on `memories.embedding`                                                     | @mahyar  | M    | `memories_vector_idx` READY, 1024 dim cosine, filters on `user_id` + `type` |
+| 4   | ⬜ todo | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                                        | @kasra   | M    | 6mo synthetic data loads cleanly        |
+| 5   | ⬜ todo | Aggregation: weekly spend by category                                                                     | @kasra   | S    | JSON returned from `/agg/weekly`        |
+| 6   | ⬜ todo | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                        | @kasra   | L    | `data/synthetic.csv` checked in         |
+| 7   | ⬜ todo | Next.js scaffold + Clerk auth + dark theme tokens                                                         | @aidin   | M    | Sign in → empty dashboard               |
+| 8   | ⬜ todo | Chat shell (streaming UI, no agent yet — echo backend)                                                    | @aidin   | M    | Type → tokens stream back               |
+| 9   | ⬜ todo | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                               | @mahyar  | M    | Hello-world loop runs locally           |
+| 10  | ⬜ todo | Glue: frontend → `/chat` → agent → MongoDB read → response                                                | all      | M    | Walking skeleton — CSV → paragraph      |
+
+**Bonus done today (2026-05-21):** Gemini, Voyage, and Clerk API keys provisioned + saved to shared Google Doc. Both teammates can run `cp .env.example .env`, paste values, and connect.
 
 **Sprint 1 demo (May 26):** Walking skeleton. "Here's a CSV, here's an agent reply that references real numbers from it."
 
