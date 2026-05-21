@@ -36,10 +36,15 @@ htmlcov/
 Thumbs.db
 *.swp
 
-# Local data
+# Local data — per-developer scratch CSVs and dumps
 data/local/
 *.sqlite
 *.db
+
+# Keep tracked data files; only ignore the local/ subdirectory
+!data/README.md
+!data/synthetic.csv
+!data/synthetic-tiny.csv
 
 # Demo artifacts kept large
 demo/raw/
