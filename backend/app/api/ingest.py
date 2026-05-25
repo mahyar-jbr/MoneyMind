@@ -20,12 +20,17 @@ async def ingest_csv(
         return {"inserted": 0, "errors": result.errors, "source": result.source}
 
     db = get_database()
-    await db.transactions.delete_many({"user_id": user_id, "source": result.source})
     insert_result = await db.transactions.insert_many(result.documents)
+    await db.transactions.delete_many(
+        {
+            "user_id": user_id,
+            "source": result.source,
+            "_id": {"$nin": insert_result.inserted_ids},
+        }
+    )
 
     return {
         "inserted": len(insert_result.inserted_ids),
         "errors": result.errors,
         "source": result.source,
     }
-
