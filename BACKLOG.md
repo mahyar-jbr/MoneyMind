@@ -27,9 +27,9 @@
 | 1   | ✅ done (2026-05-21) | Atlas cluster + IAM + connection string in `.env.example`                                | @mahyar  | S    | M0 cluster `moneymind` live in us-east-1, user `moneymind-app` created, network `0.0.0.0/0`, connection string in shared Doc |
 | 2   | 🟡 wip | Collections: `transactions`, `goals`, `memories`, `interventions`, `outcomes`, `user_context`             | @mahyar  | M    | Schemas documented in `docs/data-model.md` ✅, code-side creation TBD via ticket |
 | 3   | ✅ done (2026-05-21) | Vector index on `memories.embedding`                                                     | @mahyar  | M    | `memories_vector_idx` READY, 1024 dim cosine, filters on `user_id` + `type` |
-| 4   | ⬜ todo | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                                        | @kasra   | M    | 6mo synthetic data loads cleanly        |
-| 5   | ⬜ todo | Aggregation: weekly spend by category                                                                     | @kasra   | S    | JSON returned from `/agg/weekly`        |
-| 6   | ⬜ todo | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                        | @kasra   | L    | `data/synthetic.csv` checked in         |
+| 4   | ✅ done (2026-05-25) | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                                        | @kasra   | M    | `POST /ingest/csv` inserted test CSV rows with `errors: []` |
+| 5   | ✅ done (2026-05-25) | Aggregation: weekly spend by category                                                                     | @kasra   | S    | `/agg/weekly` returned weekly category spend for `u_482` |
+| 6   | ✅ done (2026-05-25) | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                        | @kasra   | L    | Generator wrote 330 rows to `data/synthetic.csv` + 30-row tiny fixture |
 | 7   | ⬜ todo | Next.js scaffold + Clerk auth + dark theme tokens                                                         | @aidin   | M    | Sign in → empty dashboard               |
 | 8   | ⬜ todo | Chat shell (streaming UI, no agent yet — echo backend)                                                    | @aidin   | M    | Type → tokens stream back               |
 | 9   | ⬜ todo | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                               | @mahyar  | M    | Hello-world loop runs locally           |
