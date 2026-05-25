@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 from app.ingestion.csv import canonicalize_merchant, parse_transactions_csv
 
@@ -18,6 +18,15 @@ def test_parse_transactions_csv_builds_documents():
     assert result.documents[0]["user_id"] == "u_482"
     assert result.documents[0]["merchant_canonical"] == "doordash"
     assert result.documents[0]["amount"] == -38.42
+
+
+def test_parse_transactions_csv_converts_timezone_offsets_to_utc():
+    content = b"date,merchant,category,amount,currency\n2026-02-12T09:00-05:00,DoorDash,food.delivery,-38.42,USD\n"
+
+    result = parse_transactions_csv(content)
+
+    assert result.errors == []
+    assert result.documents[0]["date"] == datetime(2026, 2, 12, 14, 0, tzinfo=UTC)
 
 
 def test_parse_transactions_csv_reports_bad_rows():
