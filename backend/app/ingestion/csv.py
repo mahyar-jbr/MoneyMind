@@ -59,7 +59,11 @@ def parse_transactions_csv(
             if not category:
                 raise ValueError("category is required")
 
-            transaction_date = datetime.fromisoformat(raw["date"]).replace(tzinfo=UTC)
+            transaction_date = datetime.fromisoformat(raw["date"])
+            if transaction_date.tzinfo is None:
+                transaction_date = transaction_date.replace(tzinfo=UTC)
+            else:
+                transaction_date = transaction_date.astimezone(UTC)
             amount = float(raw["amount"])
         except (KeyError, TypeError, ValueError) as exc:
             errors.append({"row": row_number, "error": str(exc), "raw": raw})
