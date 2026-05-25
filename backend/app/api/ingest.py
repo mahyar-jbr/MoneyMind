@@ -10,7 +10,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 @router.post("/csv")
 async def ingest_csv(
     file: UploadFile = File(...),
-    user_id: str = Form("u_482"),
+    user_id: str = Form(...),
 ) -> dict:
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a .csv file")
