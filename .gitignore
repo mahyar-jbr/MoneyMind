@@ -36,6 +36,11 @@ htmlcov/
 Thumbs.db
 *.swp
 
+# Personal AI playbooks (Mahyar's workflow, not team-shared)
+CLAUDE.md
+CLAUDE.DEV.md
+CLAUDE.REVIEW.md
+
 # Local data — per-developer scratch CSVs and dumps
 data/local/
 *.sqlite
