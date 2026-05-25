@@ -27,8 +27,8 @@
 | 1   | ✅ done (2026-05-21) | Atlas cluster + IAM + connection string in `.env.example`                                | @mahyar  | S    | M0 cluster `moneymind` live in us-east-1, user `moneymind-app` created, network `0.0.0.0/0`, connection string in shared Doc |
 | 2   | 🟡 wip | Collections: `transactions`, `goals`, `memories`, `interventions`, `outcomes`, `user_context`             | @mahyar  | M    | Schemas documented in `docs/data-model.md` ✅, code-side creation TBD via ticket |
 | 3   | ✅ done (2026-05-21) | Vector index on `memories.embedding`                                                     | @mahyar  | M    | `memories_vector_idx` READY, 1024 dim cosine, filters on `user_id` + `type` |
-| 4   | 🟡 wip | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                                        | @kasra   | M    | 6mo synthetic data loads cleanly. PR #2 in review (changes requested 2026-05-21) |
-| 5   | ⬜ todo | Aggregation: weekly spend by category                                                                     | @kasra   | S    | JSON returned from `/agg/weekly`        |
+| 4   | ✅ done (2026-05-21) | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                          | @kasra   | M    | PR #2 merged. All 3 blocking issues fixed across commits 7b68c20, 0e3cc7d, 5081cad. Awaits synthetic data (#6) to verify "6mo loads cleanly." |
+| 5   | 🟡 wip | Aggregation: weekly spend by category                                                                     | @kasra   | S    | JSON returned from `/agg/weekly`. PR #3 in review (changes requested 2026-05-21) |
 | 6   | ⬜ todo | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                        | @kasra   | L    | `data/synthetic.csv` checked in         |
 | 7   | ⬜ todo | Next.js scaffold + Clerk auth + dark theme tokens                                                         | @aidin   | M    | Sign in → empty dashboard               |
 | 8   | ⬜ todo | Chat shell (streaming UI, no agent yet — echo backend)                                                    | @aidin   | M    | Type → tokens stream back               |
@@ -87,8 +87,8 @@
 
 | #   | Status | Item                                                                | Owner    | Size | Why                                                  |
 | --- | ------ | ------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------- |
-| 4a  | ⬜ todo | Replace `user_id` form field with Clerk JWT → `user_id` resolution  | @kasra   | S    | Surfaced reviewing PR #2. Needed once #7 (Clerk) ships. Block #21 cron until done. |
-| 4b  | ⬜ todo | Decide CSV idempotency: re-upload same day = overwrite or append?   | @mahyar  | S    | Surfaced reviewing PR #2. Need an answer before #6 (synthetic data generator) ships. |
+| 4a  | ⬜ todo | Replace query/form `user_id` with Clerk JWT → `user_id` resolution across **all** routes (`/ingest/csv`, `/agg/weekly`, `/transactions`, future) | @kasra   | M    | Surfaced PR #2 + PR #3. Now blocks #21 cron AND every new route. Treat as a shared dependency, not a one-off. |
+| 4b  | ✅ done (2026-05-21) | Decide CSV idempotency: re-upload same day = overwrite or append?  | @mahyar  | S    | Decided: **overwrite**. Logged in `docs/decisions.md`. |
 
 ---
 

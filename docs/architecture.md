@@ -51,6 +51,15 @@ USER ──▶ frontend ──▶ /chat ──▶ agent ──▶ tools ──�
 2. **REASON** — Gemini plans tool calls, executes them, reflects on the result.
 3. **WRITE** — agent writes a new memory (if confidence > 0.5) and any intervention proposal back to Atlas; nudge streams back to the user.
 
+## Backend route conventions
+
+These apply to every FastAPI route. The reviewer Claude treats violations as blocking.
+
+1. **`user_id` is always required, never defaulted.** Until Clerk JWT resolution lands (#4a), every route accepts `user_id` as a required query/form/path param. No `Query("u_482")` defaults — they leak data to the demo user the moment any route becomes public.
+2. **Date ranges are inclusive on both ends.** If you accept `?to=2026-05-31`, transactions *on* May 31 must be included. Implement as `$lt next_day` or `$lte end_of_day`.
+3. **Outflow vs. inflow filters get a docstring.** `amount: {$lt: 0}` is "spending only." Future contributors will confuse this without a comment.
+4. **One resource per file in `app/api/`.** Group routes by domain (`transactions.py`, `aggregations.py`, `chat.py`), not by HTTP verb.
+
 ## What's swappable
 
 - Gemini → any LLM (LangGraph abstracts the call).
