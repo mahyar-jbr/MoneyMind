@@ -4,7 +4,7 @@
 
 ## Legend
 
-- **Status:** `⬜ todo` · `🟡 wip` · `✅ done (YYYY-MM-DD)` · `🚧 blocked`
+- **Status:** `⬜ todo` · `🟡 wip` · `✅ done (YYYY-MM-DD)` · `🚧 blocked` · `🧊 post-freeze` (deferred to after Jun 4)
 - **Size:** `S` = ½ day · `M` = 1 day · `L` = 2 days · `XL` = 3+ days
 - **Owner:** `@mahyar` (agent) · `@kasra` (backend) · `@aidin` (frontend)
 - **Demo proof:** if this lands, this is what shows up in the demo video. If you can't name a demo proof, the item is busywork — cut it.
@@ -32,7 +32,7 @@
 | 6   | ⬜ todo | Synthetic dataset generator (1 user, 6 months, realistic patterns)                                        | @kasra   | L    | `data/synthetic.csv` checked in         |
 | 7   | ⬜ todo | Next.js scaffold + Clerk auth + dark theme tokens                                                         | @aidin   | M    | Sign in → empty dashboard               |
 | 8   | ⬜ todo | Chat shell (streaming UI, no agent yet — echo backend)                                                    | @aidin   | M    | Type → tokens stream back               |
-| 9   | ⬜ todo | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                               | @mahyar  | M    | Hello-world loop runs locally           |
+| 9   | ✅ done (2026-05-21) | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                  | @mahyar  | M    | Hello-world loop runs locally. PR open as `agent/9-langgraph-min`. 4/4 tests pass, real Gemini reply on curl. Boots via `PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001`. |
 | 10  | ⬜ todo | Glue: frontend → `/chat` → agent → MongoDB read → response                                                | all      | M    | Walking skeleton — CSV → paragraph      |
 
 **Bonus done today (2026-05-21):** Gemini, Voyage, and Clerk API keys provisioned + saved to shared Google Doc. Both teammates can run `cp .env.example .env`, paste values, and connect.
@@ -89,6 +89,8 @@
 | --- | ------ | ------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------- |
 | 4a  | ⬜ todo | Replace query/form `user_id` with Clerk JWT → `user_id` resolution across **all** routes (`/ingest/csv`, `/agg/weekly`, `/transactions`, future) | @kasra   | M    | Surfaced PR #2 + PR #3. Now blocks #21 cron AND every new route. Treat as a shared dependency, not a one-off. |
 | 4b  | ✅ done (2026-05-21) | Decide CSV idempotency: re-upload same day = overwrite or append?  | @mahyar  | S    | Decided: **overwrite**. Logged in `docs/decisions.md`. |
+| 9a  | ⬜ todo | Agent service: verify Clerk JWT on `POST /chat` (parallel to #4a)   | @mahyar  | S    | Surfaced reviewing #9. Blocked on #7 (Clerk scaffold). |
+| 9b  | 🧊 post-freeze | Agent boot ergonomics: revisit package install pattern so `PYTHONPATH=..` is no longer required | @mahyar  | S    | Surfaced reviewing #9. Tried hatchling `[build-system]` install; pytest hung. Working state uses `PYTHONPATH=..` per `agent/README.md`. Not Sprint scope. |
 
 ---
 

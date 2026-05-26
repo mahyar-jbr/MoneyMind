@@ -53,10 +53,14 @@ cd agent && uv sync
 
 ```bash
 # Three terminals (or use tmux / overmind)
-cd frontend && pnpm dev                          # :3000
-cd backend  && uv run fastapi dev                # :8000
-cd agent    && uv run python -m agent.serve      # :8001
+cd frontend && pnpm dev                                            # :3000
+cd backend  && uv run fastapi dev                                  # :8000
+cd agent    && PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001  # :8001
 ```
+
+`PYTHONPATH=..` on the agent line is required — `uv init --app` doesn't install the
+project as a package, so without it uvicorn can't resolve `agent.serve`. See
+`agent/README.md` for why and a follow-up ticket (#9a).
 
 ## Smoke test (after Sprint 1)
 
