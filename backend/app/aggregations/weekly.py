@@ -8,16 +8,17 @@ async def weekly_spend_by_category(
     *,
     user_id: str,
     date_from: datetime | None = None,
-    date_to: datetime | None = None,
+    date_to_exclusive: datetime | None = None,
     category: str | None = None,
 ) -> list[dict]:
+    """Return weekly category totals for outflow transactions only."""
     match: dict = {"user_id": user_id, "amount": {"$lt": 0}}
-    if date_from or date_to:
+    if date_from or date_to_exclusive:
         match["date"] = {}
         if date_from:
             match["date"]["$gte"] = date_from
-        if date_to:
-            match["date"]["$lte"] = date_to
+        if date_to_exclusive:
+            match["date"]["$lt"] = date_to_exclusive
     if category:
         match["category"] = category
 
@@ -65,4 +66,3 @@ async def weekly_spend_by_category(
             }
         )
     return weeks
-
