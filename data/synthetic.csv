@@ -1,0 +1,331 @@
+date,merchant,category,amount,currency
+2025-12-01,Balzac's Coffee,food.coffee,-7.07,USD
+2025-12-01,Direct Deposit,income.salary,2400.00,USD
+2025-12-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2025-12-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2025-12-01,TTC,transport.transit,-3.35,USD
+2025-12-02,TTC,transport.transit,-3.35,USD
+2025-12-03,Netflix,subscriptions.streaming,-17.99,USD
+2025-12-03,No Frills,food.groceries,-85.82,USD
+2025-12-03,TTC,transport.transit,-3.35,USD
+2025-12-03,Tim Hortons,food.coffee,-8.34,USD
+2025-12-04,TTC,transport.transit,-3.35,USD
+2025-12-05,TTC,transport.transit,-3.35,USD
+2025-12-05,Tim Hortons,food.coffee,-5.68,USD
+2025-12-05,Uber Eats,food.delivery,-31.60,USD
+2025-12-06,Amazon,shopping.amazon,-27.89,USD
+2025-12-08,Balzac's Coffee,food.coffee,-7.28,USD
+2025-12-08,Spotify,subscriptions.streaming,-11.99,USD
+2025-12-08,TTC,transport.transit,-3.35,USD
+2025-12-09,TTC,transport.transit,-3.35,USD
+2025-12-10,Loblaws,food.groceries,-70.23,USD
+2025-12-10,Starbucks,food.coffee,-7.77,USD
+2025-12-10,TTC,transport.transit,-3.35,USD
+2025-12-11,TTC,transport.transit,-3.35,USD
+2025-12-12,Notion,subscriptions.software,-10.00,USD
+2025-12-12,TTC,transport.transit,-3.35,USD
+2025-12-12,Tim Hortons,food.coffee,-8.52,USD
+2025-12-12,Uber Eats,food.delivery,-28.38,USD
+2025-12-15,Balzac's Coffee,food.coffee,-8.43,USD
+2025-12-15,Direct Deposit,income.salary,2400.00,USD
+2025-12-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2025-12-15,TTC,transport.transit,-3.35,USD
+2025-12-16,TTC,transport.transit,-3.35,USD
+2025-12-17,FreshCo,food.groceries,-60.92,USD
+2025-12-17,TTC,transport.transit,-3.35,USD
+2025-12-17,Tim Hortons,food.coffee,-6.77,USD
+2025-12-18,TTC,transport.transit,-3.35,USD
+2025-12-19,DoorDash,food.delivery,-27.89,USD
+2025-12-19,TTC,transport.transit,-3.35,USD
+2025-12-19,Tim Hortons,food.coffee,-7.33,USD
+2025-12-20,GoodLife Fitness,health.gym,-34.99,USD
+2025-12-22,Amazon,shopping.amazon,-39.04,USD
+2025-12-22,Starbucks,food.coffee,-6.51,USD
+2025-12-22,TTC,transport.transit,-3.35,USD
+2025-12-23,TTC,transport.transit,-3.35,USD
+2025-12-24,Loblaws,food.groceries,-81.70,USD
+2025-12-24,Starbucks,food.coffee,-5.56,USD
+2025-12-24,TTC,transport.transit,-3.35,USD
+2025-12-25,TTC,transport.transit,-3.35,USD
+2025-12-26,TTC,transport.transit,-3.35,USD
+2025-12-26,Tim Hortons,food.coffee,-7.41,USD
+2025-12-26,Uber Eats,food.delivery,-28.66,USD
+2025-12-29,TTC,transport.transit,-3.35,USD
+2025-12-29,Tim Hortons,food.coffee,-7.00,USD
+2025-12-30,TTC,transport.transit,-3.35,USD
+2025-12-31,No Frills,food.groceries,-82.99,USD
+2025-12-31,TTC,transport.transit,-3.35,USD
+2025-12-31,Tim Hortons,food.coffee,-6.56,USD
+2026-01-01,Direct Deposit,income.salary,2400.00,USD
+2026-01-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-01-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2026-01-01,TTC,transport.transit,-3.35,USD
+2026-01-02,Bar Raval,entertainment,-52.49,USD
+2026-01-02,DoorDash,food.delivery,-37.88,USD
+2026-01-02,TTC,transport.transit,-3.35,USD
+2026-01-02,Tim Hortons,food.coffee,-7.83,USD
+2026-01-02,Uber,transport.rideshare,-26.73,USD
+2026-01-03,Netflix,subscriptions.streaming,-17.99,USD
+2026-01-05,Starbucks,food.coffee,-8.27,USD
+2026-01-05,TTC,transport.transit,-3.35,USD
+2026-01-06,Amazon,shopping.amazon,-65.46,USD
+2026-01-06,TTC,transport.transit,-3.35,USD
+2026-01-07,Loblaws,food.groceries,-64.13,USD
+2026-01-07,Starbucks,food.coffee,-6.62,USD
+2026-01-07,TTC,transport.transit,-3.35,USD
+2026-01-08,Spotify,subscriptions.streaming,-11.99,USD
+2026-01-08,TTC,transport.transit,-3.35,USD
+2026-01-09,TTC,transport.transit,-3.35,USD
+2026-01-09,Tim Hortons,food.coffee,-7.75,USD
+2026-01-09,Uber Eats,food.delivery,-30.96,USD
+2026-01-12,Notion,subscriptions.software,-10.00,USD
+2026-01-12,TTC,transport.transit,-3.35,USD
+2026-01-12,Tim Hortons,food.coffee,-5.66,USD
+2026-01-13,TTC,transport.transit,-3.35,USD
+2026-01-14,Balzac's Coffee,food.coffee,-6.57,USD
+2026-01-14,FreshCo,food.groceries,-71.93,USD
+2026-01-14,TTC,transport.transit,-3.35,USD
+2026-01-15,Direct Deposit,income.salary,2400.00,USD
+2026-01-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-01-15,TTC,transport.transit,-3.35,USD
+2026-01-16,DoorDash,food.delivery,-32.65,USD
+2026-01-16,TTC,transport.transit,-3.35,USD
+2026-01-16,The Rec Room,entertainment,-34.15,USD
+2026-01-16,Tim Hortons,food.coffee,-7.89,USD
+2026-01-16,Uber,transport.rideshare,-34.53,USD
+2026-01-19,Starbucks,food.coffee,-6.96,USD
+2026-01-19,TTC,transport.transit,-3.35,USD
+2026-01-20,GoodLife Fitness,health.gym,-34.99,USD
+2026-01-20,TTC,transport.transit,-3.35,USD
+2026-01-21,No Frills,food.groceries,-59.88,USD
+2026-01-21,TTC,transport.transit,-3.35,USD
+2026-01-21,Tim Hortons,food.coffee,-5.89,USD
+2026-01-22,Amazon,shopping.amazon,-24.29,USD
+2026-01-22,TTC,transport.transit,-3.35,USD
+2026-01-23,DoorDash,food.delivery,-28.83,USD
+2026-01-23,TTC,transport.transit,-3.35,USD
+2026-01-23,Tim Hortons,food.coffee,-6.50,USD
+2026-01-26,TTC,transport.transit,-3.35,USD
+2026-01-26,Tim Hortons,food.coffee,-5.27,USD
+2026-01-27,TTC,transport.transit,-3.35,USD
+2026-01-28,FreshCo,food.groceries,-80.13,USD
+2026-01-28,TTC,transport.transit,-3.35,USD
+2026-01-28,Tim Hortons,food.coffee,-8.64,USD
+2026-01-29,TTC,transport.transit,-3.35,USD
+2026-01-30,Starbucks,food.coffee,-6.76,USD
+2026-01-30,TTC,transport.transit,-3.35,USD
+2026-01-30,Uber Eats,food.delivery,-35.28,USD
+2026-02-01,Direct Deposit,income.salary,2400.00,USD
+2026-02-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-02-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2026-02-02,TTC,transport.transit,-3.35,USD
+2026-02-02,Tim Hortons,food.coffee,-5.78,USD
+2026-02-03,Netflix,subscriptions.streaming,-17.99,USD
+2026-02-03,TTC,transport.transit,-3.35,USD
+2026-02-04,Loblaws,food.groceries,-91.39,USD
+2026-02-04,TTC,transport.transit,-3.35,USD
+2026-02-04,Tim Hortons,food.coffee,-7.84,USD
+2026-02-05,TTC,transport.transit,-3.35,USD
+2026-02-06,Amazon,shopping.amazon,-53.88,USD
+2026-02-06,Balzac's Coffee,food.coffee,-7.13,USD
+2026-02-06,DoorDash,food.delivery,-31.93,USD
+2026-02-06,TTC,transport.transit,-3.35,USD
+2026-02-08,Spotify,subscriptions.streaming,-11.99,USD
+2026-02-09,Starbucks,food.coffee,-7.98,USD
+2026-02-09,TTC,transport.transit,-3.35,USD
+2026-02-10,DoorDash,food.delivery,-39.45,USD
+2026-02-10,TTC,transport.transit,-3.35,USD
+2026-02-11,No Frills,food.groceries,-80.64,USD
+2026-02-11,Starbucks,food.coffee,-7.54,USD
+2026-02-11,TTC,transport.transit,-3.35,USD
+2026-02-12,DoorDash,food.delivery,-38.77,USD
+2026-02-12,Notion,subscriptions.software,-10.00,USD
+2026-02-12,TTC,transport.transit,-3.35,USD
+2026-02-13,DoorDash,food.delivery,-112.25,USD
+2026-02-13,Starbucks,food.coffee,-6.81,USD
+2026-02-13,TTC,transport.transit,-3.35,USD
+2026-02-14,DoorDash,food.delivery,-48.11,USD
+2026-02-15,Direct Deposit,income.salary,2400.00,USD
+2026-02-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-02-16,Balzac's Coffee,food.coffee,-7.03,USD
+2026-02-16,TTC,transport.transit,-3.35,USD
+2026-02-17,TTC,transport.transit,-3.35,USD
+2026-02-18,Loblaws,food.groceries,-63.00,USD
+2026-02-18,TTC,transport.transit,-3.35,USD
+2026-02-18,Tim Hortons,food.coffee,-5.65,USD
+2026-02-19,TTC,transport.transit,-3.35,USD
+2026-02-20,GoodLife Fitness,health.gym,-34.99,USD
+2026-02-20,TTC,transport.transit,-3.35,USD
+2026-02-20,Tim Hortons,food.coffee,-5.78,USD
+2026-02-20,Uber Eats,food.delivery,-36.89,USD
+2026-02-22,Amazon,shopping.amazon,-48.51,USD
+2026-02-23,Balzac's Coffee,food.coffee,-7.23,USD
+2026-02-23,TTC,transport.transit,-3.35,USD
+2026-02-24,TTC,transport.transit,-3.35,USD
+2026-02-25,Loblaws,food.groceries,-63.57,USD
+2026-02-25,TTC,transport.transit,-3.35,USD
+2026-02-25,Tim Hortons,food.coffee,-7.02,USD
+2026-02-26,TTC,transport.transit,-3.35,USD
+2026-02-27,Balzac's Coffee,food.coffee,-6.61,USD
+2026-02-27,TTC,transport.transit,-3.35,USD
+2026-02-27,Uber Eats,food.delivery,-25.95,USD
+2026-03-01,Direct Deposit,income.salary,2400.00,USD
+2026-03-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-03-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2026-03-02,TTC,transport.transit,-3.35,USD
+2026-03-02,Tim Hortons,food.coffee,-7.85,USD
+2026-03-03,Netflix,subscriptions.streaming,-17.99,USD
+2026-03-03,TTC,transport.transit,-3.35,USD
+2026-03-04,FreshCo,food.groceries,-72.41,USD
+2026-03-04,TTC,transport.transit,-3.35,USD
+2026-03-04,Tim Hortons,food.coffee,-8.67,USD
+2026-03-05,TTC,transport.transit,-3.35,USD
+2026-03-06,Amazon,shopping.amazon,-38.31,USD
+2026-03-06,DoorDash,food.delivery,-25.99,USD
+2026-03-06,Starbucks,food.coffee,-8.57,USD
+2026-03-06,TTC,transport.transit,-3.35,USD
+2026-03-08,Spotify,subscriptions.streaming,-11.99,USD
+2026-03-09,TTC,transport.transit,-3.35,USD
+2026-03-09,Tim Hortons,food.coffee,-5.49,USD
+2026-03-10,TTC,transport.transit,-3.35,USD
+2026-03-11,Loblaws,food.groceries,-74.84,USD
+2026-03-11,Starbucks,food.coffee,-8.54,USD
+2026-03-11,TTC,transport.transit,-3.35,USD
+2026-03-12,Notion,subscriptions.software,-10.00,USD
+2026-03-12,TTC,transport.transit,-3.35,USD
+2026-03-13,DoorDash,food.delivery,-29.47,USD
+2026-03-13,Starbucks,food.coffee,-6.56,USD
+2026-03-13,TTC,transport.transit,-3.35,USD
+2026-03-15,Direct Deposit,income.salary,2400.00,USD
+2026-03-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-03-16,TTC,transport.transit,-3.35,USD
+2026-03-16,Tim Hortons,food.coffee,-7.90,USD
+2026-03-17,TTC,transport.transit,-3.35,USD
+2026-03-18,No Frills,food.groceries,-72.43,USD
+2026-03-18,TTC,transport.transit,-3.35,USD
+2026-03-18,Tim Hortons,food.coffee,-8.30,USD
+2026-03-19,TTC,transport.transit,-3.35,USD
+2026-03-20,GoodLife Fitness,health.gym,-34.99,USD
+2026-03-20,Starbucks,food.coffee,-7.66,USD
+2026-03-20,TTC,transport.transit,-3.35,USD
+2026-03-20,Uber Eats,food.delivery,-32.04,USD
+2026-03-22,Amazon,shopping.amazon,-72.92,USD
+2026-03-23,Starbucks,food.coffee,-8.29,USD
+2026-03-23,TTC,transport.transit,-3.35,USD
+2026-03-24,TTC,transport.transit,-3.35,USD
+2026-03-25,Loblaws,food.groceries,-91.22,USD
+2026-03-25,Starbucks,food.coffee,-5.29,USD
+2026-03-25,TTC,transport.transit,-3.35,USD
+2026-03-26,TTC,transport.transit,-3.35,USD
+2026-03-27,Balzac's Coffee,food.coffee,-6.92,USD
+2026-03-27,TTC,transport.transit,-3.35,USD
+2026-03-27,Uber Eats,food.delivery,-35.43,USD
+2026-03-30,Balzac's Coffee,food.coffee,-5.53,USD
+2026-03-30,TTC,transport.transit,-3.35,USD
+2026-03-31,TTC,transport.transit,-3.35,USD
+2026-04-01,Direct Deposit,income.salary,2400.00,USD
+2026-04-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-04-01,FreshCo,food.groceries,-61.32,USD
+2026-04-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2026-04-01,Starbucks,food.coffee,-7.87,USD
+2026-04-01,TTC,transport.transit,-3.35,USD
+2026-04-02,TTC,transport.transit,-3.35,USD
+2026-04-03,Balzac's Coffee,food.coffee,-8.64,USD
+2026-04-03,Netflix,subscriptions.streaming,-17.99,USD
+2026-04-03,TTC,transport.transit,-3.35,USD
+2026-04-03,Uber Eats,food.delivery,-29.04,USD
+2026-04-06,Amazon,shopping.amazon,-40.85,USD
+2026-04-06,TTC,transport.transit,-3.35,USD
+2026-04-06,Tim Hortons,food.coffee,-8.64,USD
+2026-04-07,TTC,transport.transit,-3.35,USD
+2026-04-08,No Frills,food.groceries,-84.07,USD
+2026-04-08,Spotify,subscriptions.streaming,-11.99,USD
+2026-04-08,Starbucks,food.coffee,-7.43,USD
+2026-04-08,TTC,transport.transit,-3.35,USD
+2026-04-09,TTC,transport.transit,-3.35,USD
+2026-04-10,Balzac's Coffee,food.coffee,-8.53,USD
+2026-04-10,DoorDash,food.delivery,-32.34,USD
+2026-04-10,TTC,transport.transit,-3.35,USD
+2026-04-12,Notion,subscriptions.software,-10.00,USD
+2026-04-13,Balzac's Coffee,food.coffee,-8.46,USD
+2026-04-13,TTC,transport.transit,-3.35,USD
+2026-04-14,TTC,transport.transit,-3.35,USD
+2026-04-15,Direct Deposit,income.salary,2400.00,USD
+2026-04-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-04-15,Loblaws,food.groceries,-87.47,USD
+2026-04-15,TTC,transport.transit,-3.35,USD
+2026-04-15,Tim Hortons,food.coffee,-7.75,USD
+2026-04-16,TTC,transport.transit,-3.35,USD
+2026-04-17,DoorDash,food.delivery,-31.69,USD
+2026-04-17,TTC,transport.transit,-3.35,USD
+2026-04-17,Tim Hortons,food.coffee,-5.99,USD
+2026-04-20,Balzac's Coffee,food.coffee,-6.15,USD
+2026-04-20,GoodLife Fitness,health.gym,-34.99,USD
+2026-04-20,TTC,transport.transit,-3.35,USD
+2026-04-21,TTC,transport.transit,-3.35,USD
+2026-04-22,Amazon,shopping.amazon,-34.90,USD
+2026-04-22,Loblaws,food.groceries,-59.23,USD
+2026-04-22,Starbucks,food.coffee,-7.00,USD
+2026-04-22,TTC,transport.transit,-3.35,USD
+2026-04-23,TTC,transport.transit,-3.35,USD
+2026-04-24,Balzac's Coffee,food.coffee,-8.50,USD
+2026-04-24,TTC,transport.transit,-3.35,USD
+2026-04-24,Uber Eats,food.delivery,-34.58,USD
+2026-04-27,Balzac's Coffee,food.coffee,-6.50,USD
+2026-04-27,TTC,transport.transit,-3.35,USD
+2026-04-28,TTC,transport.transit,-3.35,USD
+2026-04-29,Balzac's Coffee,food.coffee,-7.08,USD
+2026-04-29,Loblaws,food.groceries,-66.64,USD
+2026-04-29,TTC,transport.transit,-3.35,USD
+2026-04-30,TTC,transport.transit,-3.35,USD
+2026-05-01,Direct Deposit,income.salary,2400.00,USD
+2026-05-01,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-05-01,Maple Leaf Apartments,housing.rent,-1725.00,USD
+2026-05-01,Starbucks,food.coffee,-7.11,USD
+2026-05-01,TTC,transport.transit,-3.35,USD
+2026-05-01,Uber Eats,food.delivery,-28.66,USD
+2026-05-02,Cineplex,entertainment,-35.54,USD
+2026-05-02,Uber,transport.rideshare,-23.43,USD
+2026-05-03,Netflix,subscriptions.streaming,-17.99,USD
+2026-05-04,Balzac's Coffee,food.coffee,-5.91,USD
+2026-05-04,TTC,transport.transit,-3.35,USD
+2026-05-05,TTC,transport.transit,-3.35,USD
+2026-05-06,Amazon,shopping.amazon,-31.01,USD
+2026-05-06,No Frills,food.groceries,-88.46,USD
+2026-05-06,Starbucks,food.coffee,-6.06,USD
+2026-05-06,TTC,transport.transit,-3.35,USD
+2026-05-07,TTC,transport.transit,-3.35,USD
+2026-05-08,Balzac's Coffee,food.coffee,-8.62,USD
+2026-05-08,Spotify,subscriptions.streaming,-11.99,USD
+2026-05-08,TTC,transport.transit,-3.35,USD
+2026-05-08,Uber Eats,food.delivery,-34.72,USD
+2026-05-11,Starbucks,food.coffee,-6.38,USD
+2026-05-11,TTC,transport.transit,-3.35,USD
+2026-05-12,Notion,subscriptions.software,-10.00,USD
+2026-05-12,TTC,transport.transit,-3.35,USD
+2026-05-13,No Frills,food.groceries,-84.62,USD
+2026-05-13,TTC,transport.transit,-3.35,USD
+2026-05-13,Tim Hortons,food.coffee,-8.44,USD
+2026-05-14,TTC,transport.transit,-3.35,USD
+2026-05-15,Direct Deposit,income.salary,2400.00,USD
+2026-05-15,Emergency Fund Transfer,savings.emergency_fund,-115.00,USD
+2026-05-15,TTC,transport.transit,-3.35,USD
+2026-05-15,Tim Hortons,food.coffee,-8.32,USD
+2026-05-15,Uber Eats,food.delivery,-36.84,USD
+2026-05-16,The Rec Room,entertainment,-27.48,USD
+2026-05-16,Uber,transport.rideshare,-29.59,USD
+2026-05-18,TTC,transport.transit,-3.35,USD
+2026-05-18,Tim Hortons,food.coffee,-6.41,USD
+2026-05-19,DoorDash,food.delivery,-39.82,USD
+2026-05-19,TTC,transport.transit,-3.35,USD
+2026-05-20,Balzac's Coffee,food.coffee,-6.34,USD
+2026-05-20,GoodLife Fitness,health.gym,-34.99,USD
+2026-05-20,No Frills,food.groceries,-78.95,USD
+2026-05-20,TTC,transport.transit,-3.35,USD
+2026-05-21,DoorDash,food.delivery,-46.31,USD
+2026-05-21,TTC,transport.transit,-3.35,USD
+2026-05-22,Amazon,shopping.amazon,-73.13,USD
+2026-05-22,DoorDash,food.delivery,-78.98,USD
+2026-05-22,TTC,transport.transit,-3.35,USD
+2026-05-22,Tim Hortons,food.coffee,-8.55,USD
+2026-05-23,DoorDash,food.delivery,-46.10,USD
