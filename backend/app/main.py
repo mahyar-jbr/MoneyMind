@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import ingest
+from app.api import aggregations, ingest, transactions
 from app.db.client import close_mongo, ensure_indexes, ping_mongo
 
 
@@ -15,6 +15,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MoneyMind Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(ingest.router)
+app.include_router(aggregations.router)
+app.include_router(transactions.router)
 
 
 @app.get("/health")
