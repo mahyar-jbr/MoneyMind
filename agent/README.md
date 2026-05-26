@@ -19,9 +19,14 @@ uv add --dev pytest pytest-asyncio ruff
 # 3. Create the entrypoint (Mahyar will do this in ticket #9)
 #    agent/serve.py with: a minimal FastAPI app exposing POST /chat
 
-# 4. Run
-uv run python -m agent.serve
+# 4. Run (from inside agent/)
+PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001
 ```
+
+`PYTHONPATH=..` puts the repo root on `sys.path` so `agent.serve` resolves —
+`uv init --app` does not install the project as a package, so without it
+uvicorn can't find the `agent` module. Don't "fix" this by dropping the
+`agent.` prefix; the package layout is intentional.
 
 The agent runs on port 8001. It's called by the backend (which proxies user chat to it).
 
