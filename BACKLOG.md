@@ -30,8 +30,7 @@
 | 4   | ✅ done (2026-05-21) | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                          | @kasra   | M    | PR #2 merged. All 3 blocking issues fixed across commits 7b68c20, 0e3cc7d, 5081cad. Awaits synthetic data (#6) to verify "6mo loads cleanly." |
 | 5   | ✅ done (2026-05-26) | Aggregation: weekly spend by category                                                       | @kasra   | S    | PR #3 merged. Both blocking issues fixed: required `user_id`, end-of-day upper bound (param renamed `date_to_exclusive`). 3 new tests cover naive/aware/upper-bound cases. |
 | 6   | ✅ done (2026-05-26) | Synthetic dataset generator (1 user, 6 months, realistic patterns)                          | @kasra   | L    | PR #4 merged. 331 rows, seeded RNG, both stress events present (Feb exam week + May work week). |
-| 7   | ⬜ todo | Next.js scaffold + Clerk auth + dark theme tokens                                                         | @aidin   | M    | Sign in → empty dashboard               |
-| 8   | ⬜ todo | Chat shell (streaming UI, no agent yet — echo backend)                                                    | @aidin   | M    | Type → tokens stream back               |
+| 7+8 | 🟡 wip | Next.js scaffold + Clerk + dark theme + streaming chat shell (bundled in PR #7)                           | @aidin   | M+M  | Sign in → dashboard, type → tokens stream. PR #7 in review (changes requested 2026-05-26 — `Show` import bug). |
 | 9   | ✅ done (2026-05-21) | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                  | @mahyar  | M    | Hello-world loop runs locally. PR open as `agent/9-langgraph-min`. 4/4 tests pass, real Gemini reply on curl. Boots via `PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001`. |
 | 10  | ⬜ todo | Glue: frontend → `/chat` → agent → MongoDB read → response                                                | all      | M    | Walking skeleton — CSV → paragraph      |
 
@@ -92,6 +91,7 @@
 | 9a  | ⬜ todo | Agent service: verify Clerk JWT on `POST /chat` (parallel to #4a)   | @mahyar  | S    | Surfaced reviewing #9. Blocked on #7 (Clerk scaffold). |
 | 9b  | 🧊 post-freeze | Agent boot ergonomics: revisit package install pattern so `PYTHONPATH=..` is no longer required | @mahyar  | S    | Surfaced reviewing #9. Tried hatchling `[build-system]` install; pytest hung. Working state uses `PYTHONPATH=..` per `agent/README.md`. Not Sprint scope. |
 | 6a  | ⬜ todo | Seed script: pipe `data/synthetic.csv` → `POST /ingest/csv` (one-shot `make seed`) | @kasra | S | Surfaced reviewing #6. Removes a manual step from every dev's onboarding. |
+| 8a  | ⬜ todo | Replace `/api/chat` echo with proxy to backend `/chat` (Next.js route → FastAPI) | @aidin + @kasra | S | Surfaced reviewing #7. Part of #10 (glue). |
 
 ---
 
