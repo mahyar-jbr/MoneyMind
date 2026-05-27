@@ -12,7 +12,7 @@
 ## Rules
 
 1. **Nothing leaves the backlog without a demo proof.** If it won't appear in the 90-second video or the live walkthrough, it doesn't ship.
-2. **Update status in the daily standup.** `todo → wip → done → blocked`.
+2. **Keep status current.** `todo → wip → done → blocked`. Update the row when state changes.
 3. **Owners are locks, not suggestions.** If you're stuck, escalate before the end of the day — don't silently fall behind.
 4. **Out-of-scope items stay out.** New ideas after Sprint 1 go to `## Won't ship`, not to the top of the list.
 
@@ -30,9 +30,9 @@
 | 4   | ✅ done (2026-05-21) | CSV ingest endpoint `POST /ingest/csv` → `transactions` collection                          | @kasra   | M    | PR #2 merged. All 3 blocking issues fixed across commits 7b68c20, 0e3cc7d, 5081cad. Awaits synthetic data (#6) to verify "6mo loads cleanly." |
 | 5   | ✅ done (2026-05-26) | Aggregation: weekly spend by category                                                       | @kasra   | S    | PR #3 merged. Both blocking issues fixed: required `user_id`, end-of-day upper bound (param renamed `date_to_exclusive`). 3 new tests cover naive/aware/upper-bound cases. |
 | 6   | ✅ done (2026-05-26) | Synthetic dataset generator (1 user, 6 months, realistic patterns)                          | @kasra   | L    | PR #4 merged. 331 rows, seeded RNG, both stress events present (Feb exam week + May work week). |
-| 7+8 | 🟡 wip | Next.js scaffold + Clerk + dark theme + streaming chat shell (bundled in PR #7)                           | @aidin   | M+M  | Sign in → dashboard, type → tokens stream. PR #7 in review (changes requested 2026-05-26 — `Show` import bug). |
+| 7+8 | ✅ done (2026-05-27) | Next.js scaffold + Clerk + dark theme + streaming chat shell (bundled in PR #7)                           | @aidin   | M+M  | PR #7 reviewed MERGE 2026-05-27. `Show` import bug fixed. Sign in → /dashboard, type → tokens stream from echo handler. Two follow-ups spun out: #7a (Clerk keys → `.env.example`), #8b (lock SSE wire format). |
 | 9   | ✅ done (2026-05-21) | LangGraph minimum: 1 node, Gemini call, returns a paragraph                                  | @mahyar  | M    | Hello-world loop runs locally. PR open as `agent/9-langgraph-min`. 4/4 tests pass, real Gemini reply on curl. Boots via `PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001`. |
-| 10  | ⬜ todo | Glue: frontend → `/chat` → agent → MongoDB read → response                                                | all      | M    | Walking skeleton — CSV → paragraph      |
+| 10  | ✅ done (2026-05-27) | Glue: frontend → `/chat` → agent → MongoDB read → response                                  | all      | M    | **Walking skeleton LIVE** against real Atlas + Gemini. Full chain: 330 rows seeded → POST /chat (frontend→backend→agent→/agg/weekly→Gemini) → streamed reply citing 3 real figures (food.delivery $211.21, total $436.33, Amazon $73.13), all matching the aggregation. Agent tests 3✓, backend 8✓, ruff clean. Closes #8a. |
 
 **Bonus done today (2026-05-21):** Gemini, Voyage, and Clerk API keys provisioned + saved to shared Google Doc. Both teammates can run `cp .env.example .env`, paste values, and connect.
 
@@ -91,7 +91,9 @@
 | 9a  | ⬜ todo | Agent service: verify Clerk JWT on `POST /chat` (parallel to #4a)   | @mahyar  | S    | Surfaced reviewing #9. Blocked on #7 (Clerk scaffold). |
 | 9b  | 🧊 post-freeze | Agent boot ergonomics: revisit package install pattern so `PYTHONPATH=..` is no longer required | @mahyar  | S    | Surfaced reviewing #9. Tried hatchling `[build-system]` install; pytest hung. Working state uses `PYTHONPATH=..` per `agent/README.md`. Not Sprint scope. |
 | 6a  | ⬜ todo | Seed script: pipe `data/synthetic.csv` → `POST /ingest/csv` (one-shot `make seed`) | @kasra | S | Surfaced reviewing #6. Removes a manual step from every dev's onboarding. |
-| 8a  | ⬜ todo | Replace `/api/chat` echo with proxy to backend `/chat` (Next.js route → FastAPI) | @aidin + @kasra | S | Surfaced reviewing #7. Part of #10 (glue). |
+| 8a  | ✅ done (2026-05-27) | Replace `/api/chat` echo with proxy to backend `/chat` (Next.js route → FastAPI) | @aidin + @kasra | S | Closed by #10. Echo handler gone; `route.ts` is a transparent pass-through to `BACKEND_URL/chat`. |
+| 7a  | ⬜ todo | Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` to `.env.example` | @aidin | S | Surfaced reviewing #7. Clerk ran keyless locally, so no env vars landed — next dev to pull can't run the frontend. Onboarding blocker. |
+| 8b  | ✅ done (2026-05-27) | **Lock the chat wire format.** Decide SSE vs. text/plain and document it in `docs/architecture.md` § "Chat wire format". All three legs (`chat-stream.ts`, `/api/chat` proxy, agent `/chat` output) must agree. | @mahyar | S | Decided plain-text chunked (not SSE), logged in decisions.md, documented in architecture.md. Proven live in #10 across all 3 legs. |
 
 ---
 

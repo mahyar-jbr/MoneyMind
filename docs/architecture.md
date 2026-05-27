@@ -6,7 +6,7 @@
 
 Next.js 15 app on Vercel.
 
-- **Streaming chat** — server-sent events from the agent through a thin FastAPI proxy.
+- **Streaming chat** — plain-text chunked stream from the agent through a thin FastAPI proxy (see § "Chat wire format" below; decided 2026-05-27, not SSE).
 - **Dashboard** — weekly spend chart, goals, recent memories.
 - **Intervention approval flow** — when the agent proposes a nudge, the UI surfaces an Accept / Decline / Modify card.
 - **Auth** — Clerk. One user for the demo; the schema is namespaced per `user_id` so it generalizes.
@@ -59,6 +59,21 @@ These apply to every FastAPI route. The reviewer Claude treats violations as blo
 2. **Date ranges are inclusive on both ends.** If you accept `?to=2026-05-31`, transactions *on* May 31 must be included. Implement as `$lt next_day` or `$lte end_of_day`.
 3. **Outflow vs. inflow filters get a docstring.** `amount: {$lt: 0}` is "spending only." Future contributors will confuse this without a comment.
 4. **One resource per file in `app/api/`.** Group routes by domain (`transactions.py`, `aggregations.py`, `chat.py`), not by HTTP verb.
+
+## Chat wire format
+
+Decided 2026-05-27 (see `docs/decisions.md`). All three legs use the same format:
+
+```
+agent /chat  ──▶  FastAPI /chat proxy  ──▶  Next.js /api/chat  ──▶  chat-stream.ts
+```
+
+- **Transport:** HTTP chunked response, `Content-Type: text/plain; charset=utf-8`. Not SSE.
+- **Payload:** raw UTF-8 text tokens, streamed in order. No `data:` prefix, no event framing.
+- **End of stream:** the connection closes. No sentinel token.
+- **Errors mid-stream:** close the connection; the client surfaces a retry affordance and the user re-sends.
+
+The proxy legs are transparent pass-throughs — they forward chunks as received, they don't buffer the full response. If we ever need structured events (tool-call traces, the cron nudge channel), that's a separate decision, not a change to this one.
 
 ## What's swappable
 
