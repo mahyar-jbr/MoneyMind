@@ -54,7 +54,7 @@ cd agent && uv sync
 ```bash
 # Three terminals (or use tmux / overmind)
 cd frontend && pnpm dev                                            # :3000
-cd backend  && uv run fastapi dev                                  # :8000
+cd backend  && uv run uvicorn app.main:app --reload --port 8000    # :8000
 cd agent    && PYTHONPATH=.. uv run uvicorn agent.serve:app --port 8001  # :8001
 ```
 

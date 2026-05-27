@@ -30,7 +30,7 @@ Rules:
 5. Open a PR back to main. Title format: "feat(agent): langgraph minimum loop (#9)"
 6. Get one teammate to review (👀 + 👍 in PR comments is enough — we're 3 people).
 7. Merge. Delete the branch.
-8. Update STANDUP.md + BACKLOG.md status.
+8. Update BACKLOG.md status.
 ```
 
 ## Commit messages
@@ -79,7 +79,7 @@ The only exception: emergency rollback during the live demo. If main breaks in t
 
 ## Stale branch policy
 
-- A branch older than 3 days without a commit → ping the owner in standup.
+- A branch older than 3 days without a commit → ping the owner.
 - A branch older than a week → close the PR without merging. The work is stale; re-plan from main.
 
 ## When two people touch the same file
@@ -87,7 +87,7 @@ The only exception: emergency rollback during the live demo. If main breaks in t
 Frontend and backend each own their folders. The contact points are:
 - API contracts (defined in `docs/architecture.md`)
 - Shared TypeScript types (we'll add `shared/types.ts` if needed in Sprint 2)
-- `.env.example` (any new variable = update the file + ping in standup)
+- `.env.example` (any new variable = update the file + ping the team)
 
 If you're about to edit something in another person's folder, **ask first.** Not because of permissions — because they probably have something in flight.
 
