@@ -14,12 +14,12 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent.graphs.main import MODEL_NAME, run_chat
+from agent.graphs.main import stream_chat
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -36,14 +36,7 @@ async def _validation_to_400(request: Request, exc: RequestValidationError) -> J
 
 
 class ChatRequest(BaseModel):
-    user_id: str = Field(min_length=1)
     message: str = Field(min_length=1)
-
-
-class ChatResponse(BaseModel):
-    user_id: str
-    reply: str
-    model: str
 
 
 @app.get("/health")
@@ -51,14 +44,29 @@ def health() -> dict:
     return {"ok": True}
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest) -> ChatResponse:
-    try:
-        reply = run_chat(payload.message)
-    except Exception:
-        logger.exception("agent run failed")
-        raise HTTPException(status_code=500, detail="agent failed")
-    return ChatResponse(user_id=payload.user_id, reply=reply, model=MODEL_NAME)
+@app.post("/chat")
+def chat(payload: ChatRequest, user_id: str = Query(..., min_length=1)) -> StreamingResponse:
+    """Stream the agent's reply as plain-text chunks.
+
+    Wire format: text/plain chunked, no SSE (see docs/architecture.md
+    § "Chat wire format"). The connection closing is the end of stream.
+    """
+
+    def tokens():
+        try:
+            for chunk in stream_chat(user_id, payload.message):
+                yield chunk
+        except Exception:
+            logger.exception("agent run failed")
+            # Stream is already open; closing the connection signals the error
+            # to the client per the wire-format contract (client re-sends).
+            return
+
+    return StreamingResponse(
+        tokens(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 def main() -> None:

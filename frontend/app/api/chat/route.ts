@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 
-// TODO: replace echo with backend /chat
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
@@ -17,21 +18,27 @@ export async function POST(req: NextRequest) {
   }
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const reply = `echo: ${lastUser?.content ?? "hi"}`;
+  if (!lastUser?.content) {
+    return new Response("No user message", { status: 400 });
+  }
 
-  // stream word by word so the UI feels live
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const enc = new TextEncoder();
-      for (const w of reply.split(/(\s+)/)) {
-        controller.enqueue(enc.encode(w));
-        await new Promise((r) => setTimeout(r, 40 + Math.random() * 40));
-      }
-      controller.close();
+  // Transparent proxy: forward to the backend /chat and pipe its plain-text
+  // token stream straight through, chunk by chunk. user_id rides as a query
+  // param until #9a/#4a swap to a Clerk JWT. Wire format: text/plain chunked.
+  const upstream = await fetch(
+    `${BACKEND_URL}/chat?user_id=${encodeURIComponent(userId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: lastUser.content }),
     },
-  });
+  );
 
-  return new Response(stream, {
+  if (!upstream.ok || !upstream.body) {
+    return new Response("Agent unavailable", { status: 502 });
+  }
+
+  return new Response(upstream.body, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
