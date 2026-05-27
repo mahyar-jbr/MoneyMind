@@ -1,48 +1,35 @@
 from fastapi.testclient import TestClient
 
 from agent import serve
-from agent.graphs.main import MODEL_NAME
 
 
 client = TestClient(serve.app)
 
 
-def test_chat_returns_reply(monkeypatch):
-    monkeypatch.setattr(serve, "run_chat", lambda message: f"echo: {message}")
+def test_chat_streams_reply(monkeypatch):
+    monkeypatch.setattr(
+        serve,
+        "stream_chat",
+        lambda user_id, message: iter([f"echo:{user_id}:", message]),
+    )
 
     response = client.post(
-        "/chat",
-        json={"user_id": "u_482", "message": "How am I doing?"},
+        "/chat?user_id=u_482",
+        json={"message": "How am I doing?"},
     )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body == {
-        "user_id": "u_482",
-        "reply": "echo: How am I doing?",
-        "model": MODEL_NAME,
-    }
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "echo:u_482:How am I doing?"
 
 
-def test_chat_rejects_missing_user_id():
+def test_chat_rejects_missing_user_id(monkeypatch):
+    monkeypatch.setattr(serve, "stream_chat", lambda user_id, message: iter(["nope"]))
     response = client.post("/chat", json={"message": "hi"})
     assert response.status_code == 400
 
 
 def test_chat_rejects_empty_message(monkeypatch):
-    monkeypatch.setattr(serve, "run_chat", lambda message: "should not be called")
-    response = client.post("/chat", json={"user_id": "u_482", "message": ""})
+    monkeypatch.setattr(serve, "stream_chat", lambda user_id, message: iter(["nope"]))
+    response = client.post("/chat?user_id=u_482", json={"message": ""})
     assert response.status_code == 400
-
-
-def test_chat_returns_500_on_agent_failure(monkeypatch):
-    def boom(_message: str) -> str:
-        raise RuntimeError("gemini exploded")
-
-    monkeypatch.setattr(serve, "run_chat", boom)
-
-    response = client.post(
-        "/chat",
-        json={"user_id": "u_482", "message": "hi"},
-    )
-    assert response.status_code == 500
