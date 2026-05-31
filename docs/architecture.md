@@ -60,6 +60,18 @@ These apply to every FastAPI route. The reviewer Claude treats violations as blo
 3. **Outflow vs. inflow filters get a docstring.** `amount: {$lt: 0}` is "spending only." Future contributors will confuse this without a comment.
 4. **One resource per file in `app/api/`.** Group routes by domain (`transactions.py`, `aggregations.py`, `chat.py`), not by HTTP verb.
 
+## Agent tool conventions
+
+These apply to every tool under `agent/tools/`. The reviewer Claude treats violations as blocking. Decided 2026-05-27 (see `docs/decisions.md`).
+
+1. **One tool per file.** `agent/tools/<tool_name>.py`. The file owns the input model, the output model(s), and the async callable. No multi-tool modules.
+2. **Tools return Pydantic models, not dicts.** Input is a Pydantic model, output is a Pydantic model (or a Pydantic model wrapping a list of models). No `dict` in the return type.
+3. **`collection=None` kwarg for dependency injection.** Every Mongo-touching tool takes `*, collection=None` and falls back to `agent.db.client.get_database().<coll>`. Tests pass a `mongomock-motor` fake to skip Atlas.
+4. **`user_id` is required on the input model.** `Field(min_length=1)`. Same reason as backend route convention #1 — no defaults that silently leak to the demo user.
+5. **Date semantics match backend convention #2.** Inclusive on both ends. Implement upper bound as `$lt next_day(date_to)`.
+6. **Outflow filters get a docstring.** Same as backend convention #3.
+7. **Tools land "callable but unwired."** LangGraph binding happens in batches (#11a-style migrations), not per-tool. Tools must work when called directly with their input model — the demo proof in the ticket has to pass without the graph.
+
 ## Chat wire format
 
 Decided 2026-05-27 (see `docs/decisions.md`). All three legs use the same format:
