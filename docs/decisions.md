@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-05-27 — Agent tools take an injected `collection=None` kwarg; wired to the graph in batches
+
+**Context:** Shipping #11 forced two choices that will cascade across every Sprint 2 tool (#12–#20). First, how do tools get their Mongo handle — globals via `get_database()` or dependency-injected? Second, when do we wire each tool into the LangGraph graph — per-ticket or batched?
+
+**Decision:** Tools take an optional `collection=None` kwarg; when None, they fall back to `agent.db.client.get_database().<coll>`. Tests inject a `mongomock-motor` fake — proven in #11: 12 tests run in <1s vs. ~30s/run against Atlas. Graph wiring is deferred to a single batched migration ticket (#11a) after ~4 tools exist, switching to `create_react_agent` with the tool list as input. Per-tool wiring would mean rewriting the graph 10 times.
+
+**Trade-off:** Tools land "callable but unwired" between #11 and #11a — the chat flow can't use them yet. Acceptable: it's ~2–3 tickets of latency, and the alternative (per-ticket wiring) churns the graph shape and the prompt every time. The kwarg also adds a tiny API-surface wart (`collection=None`), which is fine.
+
+**Revisit:** Never for the kwarg — it's a stable testing pattern. The batching cadence can flex: if a tool genuinely *requires* graph integration to verify (e.g. one that only makes sense inside a tool-call loop), pull #11a forward.
+
 ## 2026-05-27 — Streaming granularity: accept Gemini's coarse chunks, no resmoothing
 
 **Context:** Skeleton (#10) streams correctly leg-to-leg, but `gemini-2.5-flash` via langchain emits only 2–3 coarse blocks (~3.5s to first block) for a short reply — so it lands in 1–2 bursts, not a smooth typewriter. The AC ("first token before generation finishes") is technically met. Question: add a client-side token-resmoothing drip now, or leave it.

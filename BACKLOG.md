@@ -48,7 +48,7 @@
 
 | #   | Item                                                          | Owner    | Size | Demo proof                              |
 | --- | ------------------------------------------------------------- | -------- | ---- | --------------------------------------- |
-| 11  | Tool: `query_transactions(filters)`                           | @mahyar  | S    | Returns rows for given filter           |
+| 11  | ✅ done (2026-05-27) Tool: `query_transactions(filters)`        | @mahyar  | S    | LANDED. `agent/tools/query_transactions.py` + `agent/db/client.py` + 12 tests. Verified on real Atlas: filter category=food.delivery, dates 2026-05-18→05-23 returns 8 DoorDash rows, boundary inclusivity proven. Ruff clean. LangGraph wiring deferred to batched migration ticket (see #11a). |
 | 12  | Tool: `get_spend_anomaly(category, window)`                   | @mahyar  | M    | Detects food spike in demo data         |
 | 13  | Tool: `recall_memory(query, k=5)` via vector search           | @mahyar  | M    | Past context surfaces in agent reply    |
 | 14  | Tool: `write_memory(type, evidence, confidence)`              | @mahyar  | S    | Doc appears in `atlas.memories`         |
@@ -94,6 +94,9 @@
 | 8a  | ✅ done (2026-05-27) | Replace `/api/chat` echo with proxy to backend `/chat` (Next.js route → FastAPI) | @aidin + @kasra | S | Closed by #10. Echo handler gone; `route.ts` is a transparent pass-through to `BACKEND_URL/chat`. |
 | 7a  | ⬜ todo | Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` to `.env.example` | @aidin | S | Surfaced reviewing #7. Clerk ran keyless locally, so no env vars landed — next dev to pull can't run the frontend. Onboarding blocker. |
 | 8b  | ✅ done (2026-05-27) | **Lock the chat wire format.** Decide SSE vs. text/plain and document it in `docs/architecture.md` § "Chat wire format". All three legs (`chat-stream.ts`, `/api/chat` proxy, agent `/chat` output) must agree. | @mahyar | S | Decided plain-text chunked (not SSE), logged in decisions.md, documented in architecture.md. Proven live in #10 across all 3 legs. |
+| 11a | ⬜ todo | **Agent graph migration to `create_react_agent`** — replace the hand-built `respond` node + the dead `_fetch_weekly_context` HTTP loop with a LangGraph prebuilt ReAct agent that takes the tool list as input. Batch-wires #11, #12, #13, #14, #15, #16, #17, #18, #19, #20 in one pass. | @mahyar | M | Surfaced reviewing #11. Decision: wire tools in batches, not per-tool, so the graph shape is decided ONCE. Run after 3-4 tools land (target: after #14). The current `_fetch_weekly_context` becomes dead code once this lands — flagged by dev report. |
+| 11b | ⬜ todo | **Data hygiene: deduplicate transactions in Atlas + fix source-key collision.** `u_482` currently has every row twice because two ingests landed under the same `source` string today; the "overwrite on duplicate source" rule either didn't fire or the sources weren't actually identical. Investigate, dedupe, and tighten the source key (e.g. include user_id + timestamp bucket) so re-ingests can't accidentally double-write. | @kasra | S | Surfaced reviewing #11. Affects every demo run from this Atlas instance. Not a #11 bug — #11 read correctly, twice. |
+| 11c | ⬜ todo | **Convention: agent tools take an injected `collection=None` kwarg.** Document the pattern in `docs/architecture.md` § "Agent tool conventions" (new section). Reason: tests can pass a mongomock-motor fake without monkeypatching globals — proven in #11 (12 tests run in <1s vs ~30s/run against Atlas). Apply to every tool #12-#20. | @mahyar | S | Surfaced in #11 dev report. One paragraph of docs; sets the pattern for the whole Sprint 2 tool series. |
 
 ---
 
