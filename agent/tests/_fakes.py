@@ -3,13 +3,15 @@
 Test-internal (note the leading underscore in the module name). If anything
 in here becomes useful to production code, MOVE it rather than re-export.
 
-Consolidates four patterns that appeared across tickets #11-#14 (#14a).
+Consolidates patterns that appeared across tickets #11-#15 (#14a + #11a).
 """
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import contextmanager
 from typing import Any
 
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
 from mongomock_motor import AsyncMongoMockClient
 
 
@@ -160,3 +162,75 @@ def get_database_tripwire(monkeypatch: Any, module: Any):
         # monkeypatch handles teardown; the try/finally is just for clarity
         # if the body raises.
         pass
+
+
+def make_fake_chat_model(
+    scripted_messages: list[AIMessage],
+) -> tuple[Any, list[list]]:
+    """Return (model, received) — model replays scripted AIMessages in order.
+
+    Established in #11a for graph tests. Subclasses langchain_core's
+    GenericFakeChatModel (Pydantic model — can't stash capture state on
+    it) and overrides:
+      - bind_tools(tools) → returns self (the script encodes which tool
+        calls fire)
+      - _stream / _astream → emit one ChatGenerationChunk per scripted
+        message, preserving tool_calls. GenericFakeChatModel's default
+        _stream tokenizes content into N chunks and would emit ZERO
+        chunks for a tool-call AIMessage (content=""), which breaks
+        create_react_agent's stream path.
+      - capture of every input messages list via the returned `received`
+        list so tests can assert what the LLM saw.
+    """
+    from langchain_core.messages import AIMessageChunk
+    from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+
+    received: list[list] = []
+    scripted_iter = iter(scripted_messages)
+
+    def _clone(msg):
+        return type(msg)(
+            content=msg.content,
+            tool_calls=getattr(msg, "tool_calls", []),
+            id=msg.id,
+        )
+
+    def _as_chunk(msg) -> AIMessageChunk:
+        import json as _json
+        return AIMessageChunk(
+            content=msg.content,
+            tool_call_chunks=[
+                {
+                    "name": tc["name"],
+                    "args": _json.dumps(tc["args"]) if isinstance(tc["args"], dict) else tc["args"],
+                    "id": tc["id"],
+                    "index": i,
+                }
+                for i, tc in enumerate(getattr(msg, "tool_calls", []) or [])
+            ],
+            id=msg.id,
+        )
+
+    class _ScriptedChatModel(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):  # noqa: ARG002
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            received.append(list(messages))
+            return ChatResult(generations=[ChatGeneration(message=_clone(next(scripted_iter)))])
+
+        async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+            received.append(list(messages))
+            return ChatResult(generations=[ChatGeneration(message=_clone(next(scripted_iter)))])
+
+        def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+            received.append(list(messages))
+            yield ChatGenerationChunk(message=_as_chunk(next(scripted_iter)))
+
+        async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+            received.append(list(messages))
+            yield ChatGenerationChunk(message=_as_chunk(next(scripted_iter)))
+
+    # Parent iter is unused — we override all four entry points.
+    model = _ScriptedChatModel(messages=iter([]))
+    return model, received
