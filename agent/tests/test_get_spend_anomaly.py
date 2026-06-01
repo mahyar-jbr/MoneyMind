@@ -1,9 +1,9 @@
 from datetime import date, datetime, timedelta
 
 import pytest
-from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
+from agent.tests._fakes import make_mongomock_collection
 from agent.tools.get_spend_anomaly import (
     GetSpendAnomalyInput,
     get_spend_anomaly,
@@ -23,8 +23,7 @@ def _doc(user_id, d, category, amount, merchant="DoorDash"):
 
 
 async def _collection_with(docs):
-    client = AsyncMongoMockClient()
-    coll = client["moneymind"]["transactions"]
+    coll = make_mongomock_collection()
     if docs:
         await coll.insert_many(docs)
     return coll

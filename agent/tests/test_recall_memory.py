@@ -15,6 +15,7 @@ import pytest
 from bson import ObjectId
 from pydantic import ValidationError
 
+from agent.tests._fakes import FakeCollection, make_fake_embedder
 from agent.tools.recall_memory import (
     MemoryHit,
     RecallMemoryInput,
@@ -23,68 +24,7 @@ from agent.tools.recall_memory import (
 )
 
 
-async def fake_embedder(text: str) -> list[float]:
-    return [0.0] * 1024
-
-
-class FakeCollection:
-    """Minimal stand-in: records pipelines, replays canned docs.
-
-    Records every aggregate() call's pipeline so tests can assert on shape.
-    Also records any UPDATE/INSERT/DELETE method invocation so a missing
-    side-effect test can prove read-only behavior.
-    """
-
-    def __init__(self, docs: list[dict]):
-        self._docs = docs
-        self.pipelines: list[list[dict]] = []
-        self.writes: list[str] = []  # any write method name attempted
-
-    def aggregate(self, pipeline):
-        self.pipelines.append(pipeline)
-        # Apply the $match score floor in Python so the score filter is testable.
-        score_floor = 0.0
-        for stage in pipeline:
-            if "$match" in stage and "score" in stage["$match"]:
-                score_floor = stage["$match"]["score"].get("$gte", 0.0)
-        # Also apply $vectorSearch limit and filter (user_id, optional type).
-        vs = pipeline[0]["$vectorSearch"]
-        limit = vs["limit"]
-        vf = vs["filter"]
-        out = []
-        for d in self._docs:
-            if d["user_id"] != vf["user_id"]["$eq"]:
-                continue
-            if "type" in vf and d["type"] != vf["type"]["$eq"]:
-                continue
-            if d["score"] < score_floor:
-                continue
-            out.append(d)
-        out.sort(key=lambda d: d["score"], reverse=True)
-        out = out[:limit]
-
-        async def _aiter():
-            for d in out:
-                yield d
-
-        return _aiter()
-
-    # Trip-wire write methods — any call here means the tool wrote and that's a bug.
-    def update_one(self, *a, **kw):
-        self.writes.append("update_one")
-        raise AssertionError("recall_memory must not write to the collection")
-
-    def update_many(self, *a, **kw):
-        self.writes.append("update_many")
-        raise AssertionError("recall_memory must not write to the collection")
-
-    def insert_one(self, *a, **kw):
-        self.writes.append("insert_one")
-        raise AssertionError("recall_memory must not write to the collection")
-
-    def delete_one(self, *a, **kw):
-        self.writes.append("delete_one")
-        raise AssertionError("recall_memory must not write to the collection")
+fake_embedder = make_fake_embedder()
 
 
 def _doc(
