@@ -35,7 +35,10 @@ async def chat(
             async with client.stream(
                 "POST",
                 f"{agent_url}/chat",
-                headers={"Authorization": f"Bearer {user.token}"},
+                headers={
+                    "Authorization": f"Bearer {user.token}",
+                    "X-MoneyMind-User-Id": user.user_id,
+                },
                 json={"message": payload.message},
             ) as response:
                 response.raise_for_status()

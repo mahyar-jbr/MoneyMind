@@ -14,12 +14,11 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent.auth.clerk import AuthenticatedUser, current_user
 from agent.graphs.main import stream_chat
 
 
@@ -40,6 +39,19 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
 
 
+def _require_loopback_client(request: Request) -> None:
+    host = request.client.host if request.client else None
+    if not _is_loopback_host(host):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="agent /chat only accepts loopback backend calls",
+        )
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
@@ -48,17 +60,19 @@ def health() -> dict:
 @app.post("/chat")
 def chat(
     payload: ChatRequest,
-    user: AuthenticatedUser = Depends(current_user),
+    request: Request,
+    user_id: str = Header(..., alias="X-MoneyMind-User-Id", min_length=1),
 ) -> StreamingResponse:
     """Stream the agent's reply as plain-text chunks.
 
     Wire format: text/plain chunked, no SSE (see docs/architecture.md
     § "Chat wire format"). The connection closing is the end of stream.
     """
+    _require_loopback_client(request)
 
     def tokens():
         try:
-            for chunk in stream_chat(user.user_id, payload.message):
+            for chunk in stream_chat(user_id, payload.message):
                 yield chunk
         except Exception:
             logger.exception("agent run failed")
