@@ -71,6 +71,7 @@ These apply to every tool under `agent/tools/`. The reviewer Claude treats viola
 5. **Date semantics match backend convention #2.** Inclusive on both ends. Implement upper bound as `$lt next_day(date_to)`.
 6. **Outflow filters get a docstring.** Same as backend convention #3.
 7. **Tools land "callable but unwired."** LangGraph binding happens in batches (#11a-style migrations), not per-tool. Tools must work when called directly with their input model — the demo proof in the ticket has to pass without the graph.
+8. **External-service tools take an `embedder=None` (or service-specific) kwarg.** Any tool that calls a non-Mongo external service (Voyage, an LLM, an HTTP API) takes an injected callable kwarg in the same pattern as `collection=None`. Tests inject a fake. Established in `#13`'s `recall_memory(*, collection=None, embedder=None)`; mandatory for every subsequent tool that calls Voyage or any other external service.
 
 ## Chat wire format
 

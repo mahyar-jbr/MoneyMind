@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-05-31 — Memory writers populate `embedding` themselves; Atlas auto-embed is NOT on
+
+**Context:** #3 said "vector index READY" and the architecture doc described Voyage auto-embed. #13 verified live: the cluster has the *vector index* set up correctly (1024-dim cosine, filters on user_id + type), but the *auto-embed pipeline* on a source field was never configured. A doc inserted without an `embedding` field stays unindexed and unfindable.
+
+**Decision:** Writers (#14, the cron in #21, the #13 demo script) compute and persist embeddings themselves via `agent.embeddings.voyage.embed_document()` before the insert. This is the working state today and ships the feature without touching cluster config. `#3a` is the optional follow-up to flip auto-embed on in Atlas; if we ever do, writers can drop the explicit embed call.
+
+**Trade-off:** Every write costs one Voyage call (~free-tier limited). Adds ~200ms latency to memory writes. Acceptable: writes are rare relative to reads, and the alternative (auto-embed) requires deeper cluster config plus a working-pattern audit. `#13b` separately covers the rate-limit hardening.
+
+**Revisit:** If auto-embed gets configured (`#3a`), drop the explicit `embed_document()` from `#14`'s write path and the demo scripts. Vector index itself does not change.
+
 ## 2026-05-31 — Anomaly tool uses Python-side 7-day buckets, not Mongo `weekly_spend_by_category`
 
 **Context:** #12 needs to compute a per-week baseline of category spend. The natural choice is to call the existing `weekly_spend_by_category` aggregation (Mongo `$dateTrunc` with `startOfWeek: monday`). But `mongomock-motor` doesn't implement `$dateTrunc`, so calling the aggregation would force every Sprint 2 tool test against real Atlas — ~30s per run × 9 remaining tools × every CI run, vs. <1s hermetic.
