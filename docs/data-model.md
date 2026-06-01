@@ -133,17 +133,23 @@ Did the intervention work? Closes the learning loop.
 ```js
 {
   _id: ObjectId,
-  intervention_id: ObjectId,
+  intervention_id: ObjectId,            // FK to interventions._id; stored as ObjectId, not string
   user_id: "u_482",
-  measured_at: ISODate(...),
+  measured_at: ISODate(...),            // UTC, server-stamped by log_outcome (#18)
   window_days: 14,
-  metric: "weekly_food_spend",
+  metric: "weekly_food_spend",          // free-string; the agent chooses the unit
   before: 180.00,
   after: 118.50,
-  delta_pct: -34.2,
+  delta_pct: -34.17,                    // SERVER-COMPUTED by #18, never agent-input.
+                                        // (after - before) / abs(before) * 100, rounded to 2dp.
+                                        // abs(before) so sign reflects direction-of-change for
+                                        // negative-baseline metrics. before=0 → 0.0 deterministic.
   agent_judgment: "successful"          // successful | partial | failed | inconclusive
+                                        // The AGENT's self-assessment, not the user's.
 }
 ```
+
+**Outcomes vs. interventions:** `log_outcome` (#18) writes the measurement; it does NOT mutate the corresponding intervention doc. The two collections are joined by `intervention_id` — readers compose, writers don't. The intervention/outcome relationship is 1:1 in spirit but unenforced by the schema (no unique index); the agent's prompt prevents double-logging.
 
 Agent reads recent outcomes when proposing similar interventions in the future.
 
