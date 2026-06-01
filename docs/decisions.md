@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — Tools don't call other tools; agent layer is the composition point
+
+**Context:** `#20 summarize_week` is the first Sprint 2 tool that *could* have called other tools — it naturally wants spend totals (mirror of `#12`'s anomaly substrate), goal pace (`#16`), and could even pre-flag anomalies. The temptation is to import `check_goal_pace` and reuse its 8-verdict ladder. Doing so would create a hidden call-depth nesting: LangGraph's tool-call routing sees ONE tool call from the LLM, but multiple Mongo reads happen, each with its own user_id injection path and its own error surface. That asymmetry breaks every reasoning the LangGraph debugger and the prompt's tool-use philosophy depend on.
+
+**Decision:** Tools stay flat. Tool A does NOT call tool B. If a chat turn wants summary + recall + anomaly, the AGENT composes them in sequence — the LangGraph ReAct loop is the composition surface, designed for exactly this. When a tool needs functionality another tool *also* needs (e.g. `#20`'s simpler 4-state goal note vs. `#16`'s 8-verdict ladder), inline the math rather than nest the call. Acceptable divergence: `#16` is for "tell me about THIS goal" (verdict-rich), `#20` is for "give me a snapshot" (compressed). Shared low-level helpers (e.g. `agent/aggregations/weekly.py`'s `weekly_spend_by_category`) are NOT tools — they're plain functions and can be imported freely.
+
+**Trade-off:** Some code duplication across tools (e.g. `_pretty(category)` shows up in `#12`, `#20`, and likely future tools). Acceptable — duplication is local and visible; nesting hides execution paths from the graph and the reviewer. The "extract on second use" rule from `#14a` still applies to plain helpers (e.g. `_pretty` is a candidate for `agent/tools/_format.py` if a third tool needs it), just not to tool-to-tool calls.
+
+**Revisit:** If we ever build a "compound" tool that the LLM should see as ONE action (e.g. "give me the full briefing"), that's a real design moment — likely a new tool whose body inlines several reads, not a tool-of-tools.
+
 ## 2026-06-01 — New `reminders` collection (not in original data-model); UTC-instant fields are a deliberate exception to convention 5
 
 **Context:** `#19 schedule_reminder` is for one-off pings — user-requested or agent-self-scheduled, no approval flow, no outcome. The original `data-model.md` schema list (transactions / goals / memories / interventions / outcomes / user_context) didn't include this surface. Two design options were rejected: reuse `interventions` with `type="reminder"` (bundles two unlike lifecycles — interventions have Accept/Decline + outcome measurement; reminders just fire), and embed in `user_context` (user_context is for state, not scheduled events). Separately, `fires_at` represents an instant in time the cron compares to `now()` every tick — naive datetimes plus a cron across timezones is exactly the production-bug shape we want to avoid.
