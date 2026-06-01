@@ -71,7 +71,7 @@ def parse_transactions_csv(
 
         documents.append(
             {
-                "user_id": raw.get("user_id") or default_user_id,
+                "user_id": default_user_id,
                 "date": transaction_date,
                 "merchant": merchant,
                 "merchant_canonical": canonicalize_merchant(merchant),
