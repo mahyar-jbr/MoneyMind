@@ -10,9 +10,14 @@ from datetime import date, datetime
 
 import pytest
 from bson import ObjectId
-from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
+from agent.tests._fakes import (
+    get_database_tripwire,
+    make_fake_embedder,
+    make_mongomock_collection,
+)
+from agent.tools import write_memory as write_memory_module
 from agent.tools.write_memory import (
     EvidenceItem,
     WriteMemoryInput,
@@ -21,17 +26,12 @@ from agent.tools.write_memory import (
 )
 
 
-async def fake_embedder(text: str) -> list[float]:
-    # Deterministic: encode the text length in the first slot for sanity-checking.
-    vec = [0.0] * 1024
-    vec[0] = float(len(text))
-    return vec
+fake_embedder = make_fake_embedder()
 
 
 @pytest.fixture
 async def memories_coll():
-    client = AsyncMongoMockClient()
-    return client["moneymind"]["memories"]
+    return make_mongomock_collection(collection_name="memories")
 
 
 def _input(**overrides):
@@ -170,21 +170,9 @@ async def test_intervention_optional(memories_coll):
 
 
 async def test_no_modification_of_other_collections(memories_coll, monkeypatch):
-    """If the tool ever reached for db.transactions/goals/etc. it would have
-    to call get_database() — which only happens when collection=None. Make
-    that path explode so the test catches any future refactor that silently
-    bypasses the injected collection."""
-
-    def explode():
-        raise AssertionError(
-            "write_memory must use the injected `collection` kwarg, "
-            "not get_database()"
-        )
-
-    monkeypatch.setattr("agent.tools.write_memory.get_database", explode)
-    # Tool succeeds because we passed collection explicitly; explodes only
-    # if it falls back to get_database().
-    await write_memory(_input(), collection=memories_coll, embedder=fake_embedder)
+    """Any silent fallback to the global db handle must fail loudly."""
+    with get_database_tripwire(monkeypatch, write_memory_module):
+        await write_memory(_input(), collection=memories_coll, embedder=fake_embedder)
     doc_count = await memories_coll.count_documents({})
     assert doc_count == 1
 

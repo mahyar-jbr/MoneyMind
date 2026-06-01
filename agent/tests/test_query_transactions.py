@@ -1,9 +1,9 @@
 from datetime import date, datetime
 
 import pytest
-from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
+from agent.tests._fakes import make_mongomock_collection
 from agent.tools.query_transactions import (
     QueryTransactionsInput,
     TransactionRow,
@@ -28,8 +28,7 @@ SEED = [
 
 @pytest.fixture
 async def collection():
-    client = AsyncMongoMockClient()
-    coll = client["moneymind"]["transactions"]
+    coll = make_mongomock_collection()
     await coll.insert_many([dict(d) for d in SEED])
     return coll
 
