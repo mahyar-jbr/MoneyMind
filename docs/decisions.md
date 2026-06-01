@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — interventions shape locked by #17 + new `status` field added; respond_to_intervention contract pre-spec'd
+
+**Context:** `#17` is the first writer to `atlas.interventions` — same schema lock-in window as `#14` (memories), `#15` (user_context), and `#16` (goals' first read+write). `data-model.md § interventions` showed only the *answered* form of the doc (`user_response: "accepted"`, `responded_at: <date>`), so it under-specified the pending state that `#17` actually produces. Readers will also frequently query "which interventions still need a response?" and a `{user_response: null}` filter is awkward for the LLM and unindexed by default.
+
+**Decision:** Three locks. (1) The persisted shape conforms to `data-model.md § interventions` exactly — now amended to call out the pending form. (2) At propose time, `user_response` and `responded_at` are explicitly null; the data-model snippet is updated to make this part of the contract, not an example artifact. (3) NEW field `status: "pending" | "responded" | "ignored"` added on top of the data-model snippet — written as `"pending"` by `#17`, flipped by the future `respond_to_intervention` tool (`#17a`). Indexable, LLM-readable, and decouples reader queries from the user_response semantic. The `#17a` contract is pre-spec'd in the `#17` dev report and the `#17a` backlog row: lookup by `intervention_id + user_id`; set the three response fields; flip status; do NOT touch related_memory's use_count (that's `#13a`).
+
+**Trade-off:** Adds one field beyond the original data-model snippet. Acceptable — it's cheap to index, removes the "is null" awkwardness across every reader, and the alternative (every reader deriving status from `user_response == null`) leaks the same logic into N call sites. The reverse migration is trivial if it ever bothers us: `$unset` the field.
+
+**Revisit:** When `respond_to_intervention` (#17a) ships and Aidin's #22 UI is wired against it. If the trio (propose → respond → status) doesn't compose cleanly under real chat flow, that's a redesign moment.
+
 ## 2026-06-01 — Async DB calls fetch BEFORE the graph runs, not inside its prompt builder
 
 **Context:** `#11a` originally specified that the graph's prompt builder would fetch active `user_context` per turn. In practice, `create_react_agent`'s prompt builder is invoked from inside an already-running asyncio loop, and motor's cursors bind to the loop they were created on. The natural sync-from-async path (`asyncio.run`) creates a new loop, and motor blows up with "Future attached to a different loop." Workarounds like `asyncio.get_event_loop` are flaky across Python versions.

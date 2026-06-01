@@ -112,11 +112,19 @@ Proposed and accepted nudges. The full lifecycle is tracked so the agent can lea
   triggered_by: { tool: "get_spend_anomaly", input: {...} },
   type: "weekly_reminder",              // cap | reminder | swap_suggestion | reflection
   params: { day: "sunday", what: "meal prep" },
-  user_response: "accepted",            // accepted | declined | modified | ignored
-  responded_at: ISODate(...),
-  related_memory: ObjectId              // optional FK to memories._id
+  user_response: "accepted",            // null at propose time; one of
+                                        // accepted | declined | modified | ignored
+                                        // after respond_to_intervention fires (#17a)
+  responded_at: ISODate(...),           // null at propose time; UTC datetime once response lands
+  related_memory: ObjectId,             // optional FK to memories._id; null when none
+  status: "pending"                     // "pending" at propose time, "responded" or
+                                        // "ignored" after respond_to_intervention. Indexable,
+                                        // cheaper for readers than {user_response: null}.
+                                        // Established by #17.
 }
 ```
+
+**Pending vs. answered:** `propose_intervention` (#17) writes the doc in PENDING form — `user_response: null`, `responded_at: null`, `status: "pending"`. The `respond_to_intervention` tool (#17a) sets the three response fields and flips `status` to `"responded"` (or `"ignored"` if a timeout path lands later). Readers querying "which interventions still need a user reply?" filter on `{status: "pending"}` — single indexable lookup.
 
 ## `outcomes`
 
