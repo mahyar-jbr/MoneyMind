@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-05-31 — Anomaly tool uses Python-side 7-day buckets, not Mongo `weekly_spend_by_category`
+
+**Context:** #12 needs to compute a per-week baseline of category spend. The natural choice is to call the existing `weekly_spend_by_category` aggregation (Mongo `$dateTrunc` with `startOfWeek: monday`). But `mongomock-motor` doesn't implement `$dateTrunc`, so calling the aggregation would force every Sprint 2 tool test against real Atlas — ~30s per run × 9 remaining tools × every CI run, vs. <1s hermetic.
+
+**Decision:** `#12` does Python-side bucketing into exactly `baseline_weeks` consecutive 7-day buckets anchored at `baseline_start`. `agent/aggregations/weekly.py` is still landed as a faithful mirror of the backend's function — reserved for tools where the OUTPUT must be calendar weeks (e.g. `#20 summarize_week`). For statistical buckets feeding an anomaly z-score, anchored 7-day windows are actually *more* correct (the divisor is exactly `baseline_weeks`, no calendar drift).
+
+**Trade-off:** The two paths produce slightly different numbers for the same date range — `#12`'s baseline ≠ `/agg/weekly` for the same span. Acceptable: their consumers are different (the agent's anomaly check vs. the API's weekly breakdown). Documented in `#12`'s implementation note so a future reader doesn't try to "fix" the divergence.
+
+**Revisit:** If `mongomock-motor` ever ships `$dateTrunc` support, or if we replace it with a real test-Atlas, the mirror module becomes the single call site and the Python bucketing can go away. Not on the critical path.
+
 ## 2026-05-27 — Agent tools take an injected `collection=None` kwarg; wired to the graph in batches
 
 **Context:** Shipping #11 forced two choices that will cascade across every Sprint 2 tool (#12–#20). First, how do tools get their Mongo handle — globals via `get_database()` or dependency-injected? Second, when do we wire each tool into the LangGraph graph — per-ticket or batched?
