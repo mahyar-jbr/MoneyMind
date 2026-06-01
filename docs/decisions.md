@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — outcomes shape locked by #18; delta_pct is server-computed, snippet precision corrected to 2dp
+
+**Context:** `#18` is the first writer to `atlas.outcomes` — same schema lock-in window as `#14` (memories), `#15` (user_context), `#16` (goals' first read+write), `#17` (interventions). The data-model.md snippet for outcomes showed `delta_pct: -34.2` (1dp), but the persistence contract needed to be 2dp — both for the agent's downstream reasoning ("interventions of type X have worked Y.YY% of the time") and to match `#18`'s tested worked example (`-34.17`).
+
+**Decision:** Three locks. (1) Outcomes shape conforms to `docs/data-model.md § outcomes` exactly — now amended with field-level commentary (FK type for `intervention_id`, server-stamping for `measured_at`, the `abs(before)` rule, the `before=0` deterministic return, agent vs. user judgment). (2) `delta_pct` is SERVER-COMPUTED by `#18` from `(after - before) / abs(before) * 100`, rounded to 2dp; the input model deliberately has no `delta_pct` field so the agent cannot pass it. Same separation as `#14`'s server-stamped `created_at`. (3) `log_outcome` does NOT mutate the corresponding intervention doc — outcomes and interventions are joined by `intervention_id`, never by cross-mutation. The 1:1 logical relationship is unenforced by the schema (no unique index); the agent's prompt prevents double-logging.
+
+**Trade-off:** Tightens the data-model snippet's precision example from `-34.2` to `-34.17`. Acceptable — anyone reading the snippet to predict tool behavior gets the right answer. Adds field-level commentary that's strictly explanatory, not contract-bending; the persisted shape is unchanged. The "no cross-mutation" rule prevents a tempting shortcut (flipping a `has_outcome` boolean on the intervention) but keeps the two surfaces independently evolvable.
+
+**Revisit:** If the agent's prompt ever drifts and starts double-logging outcomes for the same intervention. That's the signal to add a unique compound index on `(user_id, intervention_id)` to enforce schema-side, rather than prompt-side.
+
 ## 2026-06-01 — interventions shape locked by #17 + new `status` field added; respond_to_intervention contract pre-spec'd
 
 **Context:** `#17` is the first writer to `atlas.interventions` — same schema lock-in window as `#14` (memories), `#15` (user_context), and `#16` (goals' first read+write). `data-model.md § interventions` showed only the *answered* form of the doc (`user_response: "accepted"`, `responded_at: <date>`), so it under-specified the pending state that `#17` actually produces. Readers will also frequently query "which interventions still need a response?" and a `{user_response: null}` filter is awkward for the LLM and unindexed by default.
