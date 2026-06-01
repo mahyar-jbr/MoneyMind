@@ -20,6 +20,18 @@ def test_parse_transactions_csv_builds_documents():
     assert result.documents[0]["amount"] == -38.42
 
 
+def test_parse_transactions_csv_ignores_user_id_column():
+    content = (
+        b"date,merchant,category,amount,currency,user_id\n"
+        b"2026-02-12,DoorDash,food.delivery,-38.42,USD,u_attacker\n"
+    )
+
+    result = parse_transactions_csv(content, default_user_id="user_clerk_123")
+
+    assert result.errors == []
+    assert result.documents[0]["user_id"] == "user_clerk_123"
+
+
 def test_parse_transactions_csv_converts_timezone_offsets_to_utc():
     content = b"date,merchant,category,amount,currency\n2026-02-12T09:00-05:00,DoorDash,food.delivery,-38.42,USD\n"
 
