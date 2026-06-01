@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — New `reminders` collection (not in original data-model); UTC-instant fields are a deliberate exception to convention 5
+
+**Context:** `#19 schedule_reminder` is for one-off pings — user-requested or agent-self-scheduled, no approval flow, no outcome. The original `data-model.md` schema list (transactions / goals / memories / interventions / outcomes / user_context) didn't include this surface. Two design options were rejected: reuse `interventions` with `type="reminder"` (bundles two unlike lifecycles — interventions have Accept/Decline + outcome measurement; reminders just fire), and embed in `user_context` (user_context is for state, not scheduled events). Separately, `fires_at` represents an instant in time the cron compares to `now()` every tick — naive datetimes plus a cron across timezones is exactly the production-bug shape we want to avoid.
+
+**Decision:** Two locks. (1) New `reminders` collection, schema documented in `data-model.md § reminders`. Schema: `{user_id, fires_at, text, source ("user"|"agent"), related_intervention_id (ObjectId|null), status ("pending"|"fired"|"cancelled"), created_at, fired_at}`. Canonical "pending due by T" predicate is pinned in the same section so the `#21` cron and any future reader can't drift. (2) `fires_at` and `fired_at` persist as **UTC instants**, NOT naive midnight datetimes — a deliberate exception to architecture.md convention 5. Convention 5 is amended to distinguish calendar-day fields (naive midnight, the default) from instant-in-time fields (UTC-aware, this new path). The interventions-vs-reminders boundary is also pinned as a table in the data-model section.
+
+**Trade-off:** Adds one collection + one convention sub-rule. Acceptable — bundling reminders into interventions would force every intervention reader (cron, dashboard, future analytics) to type-check, and naive datetimes for instant-in-time fields invite bugs we'd then chase across timezones. The convention 5 amendment is a precise carve-out, not a loosening: every existing field stays naive-midnight; only `reminders.fires_at` and `fired_at` are UTC-instant. pymongo's default tz-stripping behavior means comparisons still work (`{$lte: datetime.now(UTC)}` vs. naive read), documented in the data-model section so the cron author isn't surprised.
+
+**Revisit:** If a future tool needs instant-in-time semantics for a NON-reminders field, the convention 5 sub-rule already covers it. If we ever want recurring reminders (vs. one-off), that's a redesign moment — recurring is what interventions cover today, and `schedule_reminder` deliberately writes single-fire docs.
+
 ## 2026-06-01 — outcomes shape locked by #18; delta_pct is server-computed, snippet precision corrected to 2dp
 
 **Context:** `#18` is the first writer to `atlas.outcomes` — same schema lock-in window as `#14` (memories), `#15` (user_context), `#16` (goals' first read+write), `#17` (interventions). The data-model.md snippet for outcomes showed `delta_pct: -34.2` (1dp), but the persistence contract needed to be 2dp — both for the agent's downstream reasoning ("interventions of type X have worked Y.YY% of the time") and to match `#18`'s tested worked example (`-34.17`).
