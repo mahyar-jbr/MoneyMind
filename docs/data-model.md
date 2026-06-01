@@ -153,6 +153,64 @@ Did the intervention work? Closes the learning loop.
 
 Agent reads recent outcomes when proposing similar interventions in the future.
 
+## `reminders`
+
+One-off scheduled pings — user-requested ("remind me to cancel the gym trial in 7 days") or agent-self-scheduled ("checking back in on the bulking goal in 3 days"). **Distinct from interventions:** no approval flow, no outcome measurement, fires once. Established by `#19`.
+
+```js
+{
+  _id: ObjectId,
+  user_id: "u_482",
+  fires_at: ISODate(...),               // UTC INSTANT-IN-TIME (see "tz contract" below).
+                                        // The moment the cron should fire this reminder.
+  text: "cancel the gym trial",         // 3-200 chars; rendered verbatim by the delivery layer.
+  source: "user",                       // "user" | "agent" — who scheduled it. Different framings
+                                        //   downstream ("you asked me to..." vs. "checking in like
+                                        //   I said I would..."), so the cron prompt branches.
+  related_intervention_id: ObjectId,    // optional FK to interventions._id; null when not anchored
+                                        //   to an intervention. Stored as ObjectId, not string.
+  status: "pending",                    // "pending" | "fired" | "cancelled"
+                                        //   pending: written by #19, awaiting fire
+                                        //   fired:   set by the #21 cron at delivery
+                                        //   cancelled: set by a future cancel_reminder tool
+  created_at: ISODate(...),             // UTC, server-stamped by #19
+  fired_at: null                        // null at write; UTC datetime set by #21 cron when fired
+}
+```
+
+**Canonical "pending due by T" predicate (the contract):** the `#21` cron — and any future reader resolving "which reminders should fire by time T?" — must use this exact predicate to avoid drift:
+
+```js
+{
+  user_id: <user>,
+  status: "pending",
+  fires_at: { $lte: T },
+}
+```
+
+…sorted `{fires_at: 1}` for ordered processing. T is `datetime.now(UTC)` at cron tick. Established + verified live in `#19`'s demo script.
+
+**Timezone contract (deliberate exception to architecture.md convention 5):** `fires_at` and `fired_at` are **UTC instants**, NOT calendar-day naive datetimes. The pipeline:
+
+- Input is UTC-aware (or coerced from naive at the model validator)
+- In-process `result.fires_at` IS UTC-aware
+- Persisted doc reads back as tz-NAIVE at the same UTC wall-clock — pymongo strips tzinfo on store by default
+- Comparisons (`{$lte: now}` with `now = datetime.now(UTC)`) still resolve correctly because both sides are at the same UTC wall-clock
+
+The cron author does NOT need to special-case the naive read — `datetime.now(UTC)` vs. a naive UTC instant compares correctly under pymongo's default behavior. This is the same shape `transactions.date` and other date fields produce, but `fires_at` represents a moment in time rather than a calendar day. Reason for the exception: naive datetime + cron across timezones is a category of production bug we'd rather not invite.
+
+**Interventions vs. reminders (the boundary):**
+
+| | Interventions (`#17`) | Reminders (`#19`) |
+|---|---|---|
+| Trigger | Pattern-detected by the agent | User-requested OR agent self-scheduled |
+| Approval | Yes — Accept / Decline / Modify | No — pre-accepted by intent |
+| Outcome | Measured in `outcomes` (`#18`) | None — fires once, marked done |
+| Cadence | Often recurring (weekly, monthly) | One-off |
+| Schema | Carries `triggered_by`, `user_response`, `related_memory` | Carries `fires_at`, `source`, optional `related_intervention_id` |
+
+When the agent observes a pattern AND wants a future ping anchored to the user's acceptance, both fire: `propose_intervention` for the pattern + `schedule_reminder` (with `related_intervention_id`) for the literal future ping.
+
 ## `langgraph_store` (managed)
 
 LangGraph's MongoDB Store, GA in 2026. Namespaced agent memory (thread state, scratchpad, conversation history). We don't manage the schema — LangGraph does.
