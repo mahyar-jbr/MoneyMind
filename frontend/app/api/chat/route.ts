@@ -4,8 +4,12 @@ import { NextRequest } from "next/server";
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const token = await getToken();
+  if (!token) {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -23,16 +27,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Transparent proxy: forward to the backend /chat and pipe its plain-text
-  // token stream straight through, chunk by chunk. user_id rides as a query
-  // param until #9a/#4a swap to a Clerk JWT. Wire format: text/plain chunked.
-  const upstream = await fetch(
-    `${BACKEND_URL}/chat?user_id=${encodeURIComponent(userId)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: lastUser.content }),
+  // token stream straight through, chunk by chunk. User identity comes from
+  // the Clerk JWT; no route accepts a caller-supplied user_id anymore.
+  const upstream = await fetch(`${BACKEND_URL}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
-  );
+    body: JSON.stringify({ message: lastUser.content }),
+  });
 
   if (!upstream.ok || !upstream.body) {
     return new Response("Agent unavailable", { status: 502 });

@@ -1,9 +1,11 @@
 import os
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from app.auth.clerk import AuthenticatedUser, current_user
 
 
 router = APIRouter(tags=["chat"])
@@ -14,7 +16,10 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-async def chat(payload: ChatRequest, user_id: str = Query(...)) -> StreamingResponse:
+async def chat(
+    payload: ChatRequest,
+    user: AuthenticatedUser = Depends(current_user),
+) -> StreamingResponse:
     """Transparent streaming proxy from the frontend to the agent.
 
     Forwards the user's message to the agent's /chat and pipes the agent's
@@ -30,7 +35,7 @@ async def chat(payload: ChatRequest, user_id: str = Query(...)) -> StreamingResp
             async with client.stream(
                 "POST",
                 f"{agent_url}/chat",
-                params={"user_id": user_id},
+                headers={"Authorization": f"Bearer {user.token}"},
                 json={"message": payload.message},
             ) as response:
                 response.raise_for_status()

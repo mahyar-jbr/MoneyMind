@@ -14,11 +14,12 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from agent.auth.clerk import AuthenticatedUser, current_user
 from agent.graphs.main import stream_chat
 
 
@@ -45,7 +46,10 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(payload: ChatRequest, user_id: str = Query(..., min_length=1)) -> StreamingResponse:
+def chat(
+    payload: ChatRequest,
+    user: AuthenticatedUser = Depends(current_user),
+) -> StreamingResponse:
     """Stream the agent's reply as plain-text chunks.
 
     Wire format: text/plain chunked, no SSE (see docs/architecture.md
@@ -54,7 +58,7 @@ def chat(payload: ChatRequest, user_id: str = Query(..., min_length=1)) -> Strea
 
     def tokens():
         try:
-            for chunk in stream_chat(user_id, payload.message):
+            for chunk in stream_chat(user.user_id, payload.message):
                 yield chunk
         except Exception:
             logger.exception("agent run failed")
