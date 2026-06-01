@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — user_context shape + active-on-date predicate locked by #15; reader contract pinned in data-model.md
+
+**Context:** Same situation as `#14` for `memories`: `user_context` was empty in Atlas before `#15`, and `#15` is the first writer. Whatever shape it persists becomes the contract for `#11a` (graph node injecting active context into the prompt), `#21` (cron writers), and `#23` (dashboard readers). Critically, *how* readers query "active on date T" is also a contract — if `#11a`'s graph node and `#23`'s dashboard write different predicates, they'll show divergent context to the user.
+
+**Decision:** Two locks. (1) The persisted shape matches `docs/data-model.md § user_context` exactly — 7 fields, no extras. Same rule as `#14`: shape changes require a decisions entry + migration plan, not silent code drift. (2) The active-on-date predicate is now pinned in `data-model.md § user_context` as the canonical contract. Every reader uses *that* predicate; if a tool needs to filter further, it composes it on top, doesn't replace it. Insert-only design choice for `#15` (no supersede, no expire) is part of this lock — the agent reconciles conflicting contexts in the prompt, not by mutating history.
+
+**Trade-off:** Less flexibility for tools that want to "expire" or "amend" prior context. Acceptable — the same separation-of-concerns that splits read (`#13`) from consume (`#13a`) applies here: writes are dumb, the prompt does the smart reconciliation. The active-on-date predicate is also slightly verbose at every call site, but the alternative (each reader inventing its own date filter) was the actual risk.
+
+**Revisit:** When a real-world conflict shows up — e.g. the dashboard renders two active contexts that contradict each other and the agent's reply confused the user. That's the signal that prompt reconciliation isn't enough and we need *some* tool-level conflict handling. Not before.
+
 ## 2026-06-01 — Memory write shape locked by #14; teammates should object now if at all
 
 **Context:** Before #14, the `memories` collection was empty (the only prior insert was #13's demo, cleaned up). #14 is the first non-test writer, which means whatever shape it persists becomes the de-facto contract for #21 (cron writer), #22/#23 (frontend readers), and #13a (use_count bump). Changing the shape is cheap NOW (one tool's code, no historical rows), expensive once cron starts writing.

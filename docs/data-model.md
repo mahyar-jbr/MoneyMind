@@ -59,6 +59,21 @@ Things the user tells the agent. The "I'm bulking" layer.
 
 The agent reads active context on every turn and weighs it before flagging anomalies.
 
+**Active-on-date predicate (the contract):** any reader resolving "which contexts apply on date `T`?" — including the graph node in #11a, future dashboard widgets, the cron — must use this exact predicate to avoid drift:
+
+```js
+{
+  user_id: <user>,
+  active_from: { $lte: T },
+  $or: [
+    { active_until: null },
+    { active_until: { $gte: T } },
+  ],
+}
+```
+
+Both bounds are inclusive (matches the codebase-wide date convention). `active_until: null` means ongoing. Established + verified live in `#15`'s demo script against real Atlas.
+
 ## `memories`
 
 Patterns the agent discovers. **This is the magic collection.**
