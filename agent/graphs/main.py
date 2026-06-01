@@ -29,9 +29,20 @@ from pydantic import BaseModel, create_model
 
 from agent.graphs.context import fetch_active_context, format_active_context
 from agent.prompts.system import SYSTEM_PROMPT
+from agent.tools.check_goal_pace import CheckGoalPaceInput, check_goal_pace
 from agent.tools.get_spend_anomaly import GetSpendAnomalyInput, get_spend_anomaly
+from agent.tools.log_outcome import LogOutcomeInput, log_outcome
+from agent.tools.propose_intervention import (
+    ProposeInterventionInput,
+    propose_intervention,
+)
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
 from agent.tools.recall_memory import RecallMemoryInput, recall_memory
+from agent.tools.schedule_reminder import (
+    ScheduleReminderInput,
+    schedule_reminder,
+)
+from agent.tools.summarize_week import SummarizeWeekInput, summarize_week
 from agent.tools.update_user_context import (
     UpdateUserContextInput,
     update_user_context,
@@ -91,6 +102,49 @@ _DESCRIPTIONS = {
         "lifestyle ('I'm bulking'), event ('exam week'), preference, or "
         "constraint. Insert-only — never used to correct prior context. Set "
         "active_from/active_until if the user gave a time range."
+    ),
+    "check_goal_pace": (
+        "Return a pace verdict for a single goal — ahead / on_track / "
+        "behind / past_due / not_started / paused / abandoned / complete. "
+        "Use when the user asks about a specific goal, when proposing an "
+        "intervention that depends on goal progress, or as part of a "
+        "weekly summary. Returns a structured verdict + a one-line note "
+        "you can paraphrase. Pass the goal_id as a string (the agent must "
+        "have it from a prior context — there is no list_goals tool yet)."
+    ),
+    "propose_intervention": (
+        "Propose an intervention the user can accept, decline, or modify: "
+        "cap (limit spending in a category), reminder (Sunday meal-prep "
+        "nudge), swap_suggestion (DoorDash → groceries), or reflection (a "
+        "prompt). Writes a PENDING doc; the user's chat reply (or the UI) "
+        "handles the response separately. ALWAYS carry triggered_by so "
+        "the next reader knows why this fired. If anchored in a recalled "
+        "memory, set related_memory_id. Do NOT call write_memory in the "
+        "same turn — that fires on the response, not the proposal."
+    ),
+    "log_outcome": (
+        "Log the measured outcome of a past intervention — the 'did it "
+        "work?' record. Pass before/after for a metric over window_days; "
+        "the tool computes delta_pct itself. agent_judgment is YOUR "
+        "interpretation (successful | partial | failed | inconclusive), "
+        "not the user's. Use only after observing real post-intervention "
+        "behavior; do NOT call this twice for the same intervention."
+    ),
+    "schedule_reminder": (
+        "Schedule a one-off reminder to fire at a specific UTC instant. "
+        "Use when the user explicitly asks ('remind me to cancel the gym "
+        "trial in 7 days') OR when you want to self-schedule a follow-up. "
+        "Distinct from propose_intervention: no approval, no outcome, "
+        "fires once. Pass fires_at as an absolute UTC datetime — resolve "
+        "'in N days' phrasing to a real instant at call time."
+    ),
+    "summarize_week": (
+        "Produce a weekly spending digest for a user — structured spend "
+        "breakdown + active-goal snapshots + a ready-to-post paragraph. "
+        "Use for 'how am I doing this week?' style questions, for weekly "
+        "check-ins, or before proposing an intervention that depends on "
+        "recent context. ISO Monday-Sunday weeks; week_offset=0 is the "
+        "current week, -1 is last week."
     ),
 }
 
@@ -152,6 +206,11 @@ def _build_tools() -> list[StructuredTool]:
         _wrap_tool(recall_memory, name="recall_memory", input_model=RecallMemoryInput),
         _wrap_tool(write_memory, name="write_memory", input_model=WriteMemoryInput),
         _wrap_tool(update_user_context, name="update_user_context", input_model=UpdateUserContextInput),
+        _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
+        _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),
+        _wrap_tool(log_outcome, name="log_outcome", input_model=LogOutcomeInput),
+        _wrap_tool(schedule_reminder, name="schedule_reminder", input_model=ScheduleReminderInput),
+        _wrap_tool(summarize_week, name="summarize_week", input_model=SummarizeWeekInput),
     ]
 
 

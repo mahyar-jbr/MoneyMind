@@ -321,3 +321,249 @@ async def test_streaming_yields_only_final_reply(context_coll):
     # must NOT appear in what the user sees.
     assert "memories" not in joined
     assert "count" not in joined
+
+
+# ─── #17-wire — newly wired tools (one e2e scenario each) ──────────
+
+
+async def test_check_goal_pace_flow(context_coll):
+    """LLM calls check_goal_pace. Wrapper injects user_id; LLM-facing schema
+    omits user_id so a forged value in args has no effect."""
+    from bson import ObjectId
+    from datetime import date
+
+    goal_id = str(ObjectId())
+    llm, _r = make_fake_chat_model([
+        _tool_call(
+            "check_goal_pace",
+            # LLM tries to forge user_id; LLM-facing schema strips it.
+            {"goal_id": goal_id, "user_id": "EVIL"},
+            "c1",
+        ),
+        AIMessage(content="You're 28% behind on the Emergency Fund."),
+    ])
+
+    captured = {}
+
+    async def fake_pace(params):
+        captured["seen"] = params
+        from agent.tools.check_goal_pace import CheckGoalPaceResult
+        return CheckGoalPaceResult(
+            user_id=params.user_id,
+            goal_id=params.goal_id,
+            title="Emergency Fund",
+            status="active",
+            target_amount=8000.0,
+            current_amount=2400.0,
+            target_date=date(2026, 12, 31),
+            as_of=date(2026, 6, 1),
+            expected_amount=3319.0,
+            delta_amount=-919.0,
+            delta_pct=-27.7,
+            verdict="behind",
+            note="Emergency Fund: -28% behind pace.",
+        )
+
+    with patch("agent.graphs.main.check_goal_pace", fake_pace):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "how's my emergency fund?"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].goal_id == goal_id
+
+
+async def test_propose_intervention_flow(context_coll):
+    """LLM calls propose_intervention with a trigger; wrapper carries user_id."""
+    llm, _r = make_fake_chat_model([
+        _tool_call(
+            "propose_intervention",
+            {
+                "type": "reminder",
+                "params": {"day": "sunday", "what": "meal prep"},
+                "triggered_by": {
+                    "tool": "get_spend_anomaly",
+                    "input": {"category": "food.delivery", "window_days": 7},
+                },
+            },
+            "c1",
+        ),
+        AIMessage(content="Want me to set a Sunday meal-prep reminder?"),
+    ])
+
+    captured = {}
+
+    async def fake_propose(params):
+        captured["seen"] = params
+        from datetime import UTC, datetime
+        from agent.tools.propose_intervention import ProposeInterventionResult
+        return ProposeInterventionResult(
+            intervention_id="iv1",
+            user_id=params.user_id,
+            type=params.type,
+            proposed_at=datetime.now(UTC),
+            status="pending",
+        )
+
+    with patch("agent.graphs.main.propose_intervention", fake_propose):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "anything you'd suggest?"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].type == "reminder"
+    assert captured["seen"].triggered_by.tool == "get_spend_anomaly"
+
+
+async def test_log_outcome_flow(context_coll):
+    """LLM calls log_outcome; delta_pct is computed server-side, not from args."""
+    from bson import ObjectId
+    from datetime import UTC, datetime
+
+    intervention_id = str(ObjectId())
+    llm, _r = make_fake_chat_model([
+        _tool_call(
+            "log_outcome",
+            {
+                "intervention_id": intervention_id,
+                "window_days": 14,
+                "metric": "weekly_food_spend",
+                "before": 180.0,
+                "after": 118.5,
+                "agent_judgment": "successful",
+            },
+            "c1",
+        ),
+        AIMessage(content="Logged — food spending fell 34%."),
+    ])
+
+    captured = {}
+
+    async def fake_log(params):
+        captured["seen"] = params
+        from agent.tools.log_outcome import LogOutcomeResult
+        return LogOutcomeResult(
+            outcome_id="o1",
+            user_id=params.user_id,
+            intervention_id=params.intervention_id,
+            metric=params.metric,
+            window_days=params.window_days,
+            before=params.before,
+            after=params.after,
+            delta_pct=-34.17,
+            agent_judgment=params.agent_judgment,
+            measured_at=datetime.now(UTC),
+        )
+
+    with patch("agent.graphs.main.log_outcome", fake_log):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "the cap worked, food's way down"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].intervention_id == intervention_id
+    assert captured["seen"].agent_judgment == "successful"
+
+
+async def test_schedule_reminder_flow(context_coll):
+    """LLM calls schedule_reminder with a future UTC instant."""
+    from datetime import UTC, datetime, timedelta
+
+    fires_at = datetime.now(UTC) + timedelta(days=7)
+    llm, _r = make_fake_chat_model([
+        _tool_call(
+            "schedule_reminder",
+            {
+                # The fake LLM serializes datetimes as ISO strings —
+                # the Pydantic input model coerces them.
+                "fires_at": fires_at.isoformat(),
+                "text": "cancel the gym trial",
+                "source": "user",
+            },
+            "c1",
+        ),
+        AIMessage(content="Got it — I'll remind you in a week."),
+    ])
+
+    captured = {}
+
+    async def fake_schedule(params):
+        captured["seen"] = params
+        from agent.tools.schedule_reminder import ScheduleReminderResult
+        return ScheduleReminderResult(
+            reminder_id="r1",
+            user_id=params.user_id,
+            fires_at=params.fires_at,
+            text=params.text,
+            source=params.source,
+            status="pending",
+            created_at=datetime.now(UTC),
+        )
+
+    with patch("agent.graphs.main.schedule_reminder", fake_schedule):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "remind me in 7 days to cancel the gym"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].source == "user"
+    assert captured["seen"].text == "cancel the gym trial"
+
+
+async def test_summarize_week_flow(context_coll):
+    """LLM calls summarize_week. user_id injected; aggregator NOT in LLM schema."""
+    from datetime import date
+
+    llm, _r = make_fake_chat_model([
+        _tool_call("summarize_week", {"as_of": "2026-05-24"}, "c1"),
+        AIMessage(content="You spent $340 across 8 transactions."),
+    ])
+
+    captured = {}
+
+    async def fake_summarize(params, *, collection=None, goals_collection=None, aggregator=None):
+        # Wrapper does NOT forward collection/goals_collection/aggregator
+        # because those aren't in the LLM-facing schema; assert they
+        # arrived as their defaults (None).
+        captured["seen"] = params
+        captured["collection_kw"] = collection
+        captured["goals_collection_kw"] = goals_collection
+        captured["aggregator_kw"] = aggregator
+        from agent.tools.summarize_week import (
+            CategorySpend,
+            SummarizeWeekResult,
+        )
+        return SummarizeWeekResult(
+            user_id=params.user_id,
+            week_start=date(2026, 5, 18),
+            week_end=date(2026, 5, 24),
+            total_spend=340.0,
+            transaction_count=8,
+            top_categories=[
+                CategorySpend(category="food.delivery", spend=211.0, pct_of_total=62.1),
+            ],
+            goals=[],
+            paragraph="Week of Mon, May 18: you spent $340 across 8 transactions.",
+        )
+
+    with patch("agent.graphs.main.summarize_week", fake_summarize):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "how am I doing this week?"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].as_of == date(2026, 5, 24)
+    # The 3 kwarg-only injection slots must arrive as defaults (None).
+    assert captured["collection_kw"] is None
+    assert captured["goals_collection_kw"] is None
+    assert captured["aggregator_kw"] is None
