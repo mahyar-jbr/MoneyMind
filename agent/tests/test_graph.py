@@ -567,3 +567,50 @@ async def test_summarize_week_flow(context_coll):
     assert captured["collection_kw"] is None
     assert captured["goals_collection_kw"] is None
     assert captured["aggregator_kw"] is None
+
+
+# ─── #17a-wire — respond_to_intervention ────────────────────────────
+
+
+async def test_respond_to_intervention_flow(context_coll):
+    """LLM calls respond_to_intervention to close the proposal loop;
+    wrapper injects user_id from state, intervention_id round-trips."""
+    from bson import ObjectId
+    from datetime import UTC, datetime
+
+    intervention_id = str(ObjectId())
+    llm, _r = make_fake_chat_model([
+        _tool_call(
+            "respond_to_intervention",
+            {"intervention_id": intervention_id, "user_response": "accepted"},
+            "c1",
+        ),
+        AIMessage(content="Got it — Sunday reminder set."),
+    ])
+
+    captured = {}
+
+    async def fake_respond(params):
+        captured["seen"] = params
+        from agent.tools.respond_to_intervention import RespondToInterventionResult
+        return RespondToInterventionResult(
+            intervention_id=params.intervention_id,
+            user_id=params.user_id,
+            previous_status="pending",
+            new_status="responded",
+            user_response=params.user_response,
+            responded_at=datetime.now(UTC),
+            params_changed=False,
+        )
+
+    with patch("agent.graphs.main.respond_to_intervention", fake_respond):
+        graph = build_graph(llm=llm, context_collection=context_coll)
+        await graph.ainvoke({
+            "user_id": "u_482",
+            "messages": [{"role": "user", "content": "yes please"}],
+        })
+
+    assert captured["seen"].user_id == "u_482"
+    assert captured["seen"].intervention_id == intervention_id
+    assert captured["seen"].user_response == "accepted"
+    assert captured["seen"].modified_params is None

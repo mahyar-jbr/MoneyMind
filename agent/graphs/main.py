@@ -38,6 +38,10 @@ from agent.tools.propose_intervention import (
 )
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
 from agent.tools.recall_memory import RecallMemoryInput, recall_memory
+from agent.tools.respond_to_intervention import (
+    RespondToInterventionInput,
+    respond_to_intervention,
+)
 from agent.tools.schedule_reminder import (
     ScheduleReminderInput,
     schedule_reminder,
@@ -121,6 +125,15 @@ _DESCRIPTIONS = {
         "the next reader knows why this fired. If anchored in a recalled "
         "memory, set related_memory_id. Do NOT call write_memory in the "
         "same turn — that fires on the response, not the proposal."
+    ),
+    "respond_to_intervention": (
+        "Record the user's response to a pending intervention. Call this "
+        "when the user replies in chat to a proposal — 'yes' / 'no' / "
+        "'sure but make it Saturday' all map here. Flips the intervention "
+        "from PENDING to RESPONDED (or IGNORED). For 'modified' responses, "
+        "resolve the user's tweak into a new params dict and pass it via "
+        "modified_params. Call this BEFORE write_memory — the memory write "
+        "fires on the response, not the proposal."
     ),
     "log_outcome": (
         "Log the measured outcome of a past intervention — the 'did it "
@@ -208,6 +221,7 @@ def _build_tools() -> list[StructuredTool]:
         _wrap_tool(update_user_context, name="update_user_context", input_model=UpdateUserContextInput),
         _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
         _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),
+        _wrap_tool(respond_to_intervention, name="respond_to_intervention", input_model=RespondToInterventionInput),
         _wrap_tool(log_outcome, name="log_outcome", input_model=LogOutcomeInput),
         _wrap_tool(schedule_reminder, name="schedule_reminder", input_model=ScheduleReminderInput),
         _wrap_tool(summarize_week, name="summarize_week", input_model=SummarizeWeekInput),
