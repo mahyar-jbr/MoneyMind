@@ -2,6 +2,26 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — Async DB calls fetch BEFORE the graph runs, not inside its prompt builder
+
+**Context:** `#11a` originally specified that the graph's prompt builder would fetch active `user_context` per turn. In practice, `create_react_agent`'s prompt builder is invoked from inside an already-running asyncio loop, and motor's cursors bind to the loop they were created on. The natural sync-from-async path (`asyncio.run`) creates a new loop, and motor blows up with "Future attached to a different loop." Workarounds like `asyncio.get_event_loop` are flaky across Python versions.
+
+**Decision:** Any DB read needed for the system message is pre-fetched in the public entry points (`run_chat` / `arun_chat` / `stream_chat`) BEFORE the graph runs, then passed via state as a pre-formatted string. The prompt builder is pure-sync: it concatenates the SYSTEM_PROMPT with whatever state already contains. `agent/graphs/main.py`'s `_build_initial_state` does the fetch; `_prompt_builder` only reads.
+
+**Trade-off:** Loses the "prompt builder fetches anything it wants per turn" cleanliness. Acceptable — the prompt builder runs on every internal LLM↔tool turn (multiple times per user turn), and you don't want a DB roundtrip on every iteration anyway. Pre-fetching at the entry point is faster *and* correct.
+
+**Revisit:** Anyone writing a future graph node that needs DB access. The pattern: fetch in the entry point, hand it to state, the node reads from state.
+
+## 2026-06-01 — gemini-2.5-flash content is `list[dict]`, not `str` — flatten before streaming
+
+**Context:** `#11a`'s live demo broke on the chat wire format because `gemini-2.5-flash` returns `AIMessage.content` as a list of content blocks (`[{"type": "text", "text": "..."}, ...]`) when its default thinking mode is on. The plain-text streaming wire (`docs/architecture.md § "Chat wire format"`) expects a string.
+
+**Decision:** `agent/graphs/main.py` ships `_content_to_text(content)` that flattens list-of-blocks to a concatenation of `text` parts. Used by both `arun_chat` (for the final reply) and `stream_chat` (for each streamed chunk). String inputs pass through unchanged.
+
+**Trade-off:** Thinking-block metadata is dropped on the floor. Acceptable — the user's chat UI only renders text, and surfacing internal reasoning isn't part of the wire format. If we ever want to expose a "thinking" channel separately, that's a deliberate ticket, not a default.
+
+**Revisit:** If we change the model to one that returns plain strings (older Gemini, or another provider), `_content_to_text` becomes a no-op but should stay — it's defensive and free.
+
 ## 2026-06-01 — user_context shape + active-on-date predicate locked by #15; reader contract pinned in data-model.md
 
 **Context:** Same situation as `#14` for `memories`: `user_context` was empty in Atlas before `#15`, and `#15` is the first writer. Whatever shape it persists becomes the contract for `#11a` (graph node injecting active context into the prompt), `#21` (cron writers), and `#23` (dashboard readers). Critically, *how* readers query "active on date T" is also a contract — if `#11a`'s graph node and `#23`'s dashboard write different predicates, they'll show divergent context to the user.
