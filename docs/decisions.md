@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — Memory write shape locked by #14; teammates should object now if at all
+
+**Context:** Before #14, the `memories` collection was empty (the only prior insert was #13's demo, cleaned up). #14 is the first non-test writer, which means whatever shape it persists becomes the de-facto contract for #21 (cron writer), #22/#23 (frontend readers), and #13a (use_count bump). Changing the shape is cheap NOW (one tool's code, no historical rows), expensive once cron starts writing.
+
+**Decision:** Lock the persisted shape to exactly what `docs/data-model.md § memories` describes — no extra fields, no missing fields, type-strict. #14 conforms. Any future shape addition (new field, renamed field, restructured `intervention`) requires a decisions.md entry AND a migration plan, not a silent code change.
+
+**Trade-off:** Less flexibility for the agent to "stuff extra context" into memories. Acceptable: the prompt is what shapes the agent's writes; the schema is what shapes consumer code. Mixing them costs more than separating them.
+
+**Revisit:** Anytime a teammate has trouble consuming the shape. The next two ramps that will pressure-test it: #21 cron (writes from a different code path) and #23 dashboard (reads structured `evidence` and `intervention`).
+
 ## 2026-05-31 — Memory writers populate `embedding` themselves; Atlas auto-embed is NOT on
 
 **Context:** #3 said "vector index READY" and the architecture doc described Voyage auto-embed. #13 verified live: the cluster has the *vector index* set up correctly (1024-dim cosine, filters on user_id + type), but the *auto-embed pipeline* on a source field was never configured. A doc inserted without an `embedding` field stays unindexed and unfindable.
