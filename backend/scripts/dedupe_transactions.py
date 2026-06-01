@@ -36,17 +36,21 @@ def duplicate_pipeline(user_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def duplicate_ids_to_delete(duplicate_groups: list[dict[str, Any]]) -> list[Any]:
+    return [
+        duplicate_id
+        for group in duplicate_groups
+        for duplicate_id in group["ids"][1:]
+    ]
+
+
 async def dedupe_transactions(*, user_id: str, apply: bool) -> dict[str, int]:
     db = get_database()
     duplicate_groups = []
     async for group in db.transactions.aggregate(duplicate_pipeline(user_id)):
         duplicate_groups.append(group)
 
-    duplicate_ids = [
-        duplicate_id
-        for group in duplicate_groups
-        for duplicate_id in group["ids"][1:]
-    ]
+    duplicate_ids = duplicate_ids_to_delete(duplicate_groups)
 
     deleted = 0
     if apply and duplicate_ids:
