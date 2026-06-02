@@ -1,5 +1,6 @@
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from app.auth.clerk import AuthenticatedUser, current_user
 from app.db.client import get_database
 from app.ingestion.csv import parse_transactions_csv
 
@@ -10,12 +11,12 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 @router.post("/csv")
 async def ingest_csv(
     file: UploadFile = File(...),
-    user_id: str = Form(...),
+    user: AuthenticatedUser = Depends(current_user),
 ) -> dict:
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a .csv file")
 
-    result = parse_transactions_csv(await file.read(), default_user_id=user_id)
+    result = parse_transactions_csv(await file.read(), default_user_id=user.user_id)
     if not result.documents:
         return {"inserted": 0, "errors": result.errors, "source": result.source}
 
@@ -23,7 +24,7 @@ async def ingest_csv(
     insert_result = await db.transactions.insert_many(result.documents)
     await db.transactions.delete_many(
         {
-            "user_id": user_id,
+            "user_id": user.user_id,
             "source": result.source,
             "_id": {"$nin": insert_result.inserted_ids},
         }

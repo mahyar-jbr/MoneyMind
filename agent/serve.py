@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -26,6 +26,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
 
 logger = logging.getLogger(__name__)
+AGENT_HOST = "127.0.0.1"
 
 app = FastAPI(title="MoneyMind Agent", version="0.1.0")
 
@@ -39,18 +40,36 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
 
 
+def _require_loopback_client(request: Request) -> None:
+    host = request.client.host if request.client else None
+    if not _is_loopback_host(host):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="agent /chat only accepts loopback backend calls",
+        )
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
 
 
 @app.post("/chat")
-def chat(payload: ChatRequest, user_id: str = Query(..., min_length=1)) -> StreamingResponse:
+def chat(
+    payload: ChatRequest,
+    request: Request,
+    user_id: str = Header(..., alias="X-MoneyMind-User-Id", min_length=1),
+) -> StreamingResponse:
     """Stream the agent's reply as plain-text chunks.
 
     Wire format: text/plain chunked, no SSE (see docs/architecture.md
     § "Chat wire format"). The connection closing is the end of stream.
     """
+    _require_loopback_client(request)
 
     def tokens():
         try:
@@ -72,7 +91,7 @@ def chat(payload: ChatRequest, user_id: str = Query(..., min_length=1)) -> Strea
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("agent.serve:app", host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run("agent.serve:app", host=AGENT_HOST, port=8001, reload=False)
 
 
 if __name__ == "__main__":
