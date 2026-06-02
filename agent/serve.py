@@ -26,6 +26,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
 
 logger = logging.getLogger(__name__)
+AGENT_HOST = "127.0.0.1"
 
 app = FastAPI(title="MoneyMind Agent", version="0.1.0")
 
@@ -90,7 +91,7 @@ def chat(
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("agent.serve:app", host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run("agent.serve:app", host=AGENT_HOST, port=8001, reload=False)
 
 
 if __name__ == "__main__":

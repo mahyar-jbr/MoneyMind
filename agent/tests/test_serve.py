@@ -44,3 +44,7 @@ def test_loopback_host_check_rejects_non_local_clients():
     assert serve._is_loopback_host("127.0.0.1") is True
     assert serve._is_loopback_host("::1") is True
     assert serve._is_loopback_host("203.0.113.10") is False
+
+
+def test_agent_binds_loopback_only():
+    assert serve.AGENT_HOST == "127.0.0.1"
