@@ -3,8 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { backendUrl } from "@/lib/backend";
 
 export async function GET(req: NextRequest) {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+  const token = await getToken();
+  if (!token) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
@@ -12,7 +16,10 @@ export async function GET(req: NextRequest) {
   const url = backendUrl("/transactions", { limit });
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!res.ok) {
       return NextResponse.json({ error: `backend ${res.status}` }, { status: 502 });
     }
