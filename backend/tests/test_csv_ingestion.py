@@ -11,9 +11,13 @@ def test_canonicalize_merchant():
 def test_parse_transactions_csv_builds_documents():
     content = b"date,merchant,category,amount,currency\n2026-02-12,DoorDash,food.delivery,-38.42,USD\n"
 
-    result = parse_transactions_csv(content, source_date=date(2026, 5, 24))
+    result = parse_transactions_csv(
+        content,
+        source_date=date(2026, 5, 24),
+        source_name="synthetic.csv",
+    )
 
-    assert result.source == "csv_import_2026-05-24"
+    assert result.source.startswith("csv_import_2026-05-24_synthetic_csv_")
     assert result.errors == []
     assert result.documents[0]["user_id"] == "u_482"
     assert result.documents[0]["merchant_canonical"] == "doordash"
@@ -30,6 +34,24 @@ def test_parse_transactions_csv_ignores_user_id_column():
 
     assert result.errors == []
     assert result.documents[0]["user_id"] == "user_clerk_123"
+
+
+def test_parse_transactions_csv_source_changes_with_content():
+    first = b"date,merchant,category,amount,currency\n2026-02-12,DoorDash,food.delivery,-38.42,USD\n"
+    second = b"date,merchant,category,amount,currency\n2026-02-12,DoorDash,food.delivery,-39.42,USD\n"
+
+    first_result = parse_transactions_csv(
+        first,
+        source_date=date(2026, 5, 24),
+        source_name="synthetic.csv",
+    )
+    second_result = parse_transactions_csv(
+        second,
+        source_date=date(2026, 5, 24),
+        source_name="synthetic.csv",
+    )
+
+    assert first_result.source != second_result.source
 
 
 def test_parse_transactions_csv_converts_timezone_offsets_to_utc():

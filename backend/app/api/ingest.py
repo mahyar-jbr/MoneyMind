@@ -16,7 +16,11 @@ async def ingest_csv(
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Upload a .csv file")
 
-    result = parse_transactions_csv(await file.read(), default_user_id=user.user_id)
+    result = parse_transactions_csv(
+        await file.read(),
+        default_user_id=user.user_id,
+        source_name=file.filename,
+    )
     if not result.documents:
         return {"inserted": 0, "errors": result.errors, "source": result.source}
 

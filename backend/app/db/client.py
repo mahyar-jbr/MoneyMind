@@ -40,6 +40,22 @@ async def ensure_indexes() -> None:
         [("user_id", ASCENDING), ("category", ASCENDING), ("date", DESCENDING)],
         name="transactions_user_category_date",
     )
+    await db.inbox_messages.create_index(
+        [("user_id", ASCENDING), ("created_at", DESCENDING)],
+        name="inbox_user_created",
+    )
+    await db.inbox_messages.create_index(
+        [("user_id", ASCENDING), ("type", ASCENDING), ("metadata.week_start", ASCENDING)],
+        name="inbox_user_type_week",
+    )
+    await db.reminders.create_index(
+        [("user_id", ASCENDING), ("status", ASCENDING), ("fires_at", ASCENDING)],
+        name="reminders_due",
+    )
+    await db.interventions.create_index(
+        [("user_id", ASCENDING), ("status", ASCENDING), ("proposed_at", DESCENDING)],
+        name="interventions_user_status_proposed",
+    )
 
 
 async def close_mongo() -> None:
@@ -47,4 +63,3 @@ async def close_mongo() -> None:
     if _client is not None:
         _client.close()
         _client = None
-
