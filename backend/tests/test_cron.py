@@ -5,7 +5,8 @@ import pytest
 from bson import ObjectId
 
 from app.cron.reminders import fire_due_reminders
-from app.cron.weekly_summary import post_weekly_summary
+from app.cron import weekly_summary
+from app.cron.weekly_summary import fetch_agent_weekly_summary, post_weekly_summary
 
 
 class _InsertResult:
@@ -85,20 +86,84 @@ class _Db:
         self.reminders = _Collection()
 
 
+class _FakeAgentResponse:
+    def __init__(self, seen: dict[str, Any]):
+        self.seen = seen
+
+    def raise_for_status(self):
+        self.seen["raise_for_status_called"] = True
+
+    async def aiter_text(self):
+        yield "Week of Mon, Jun 1: "
+        yield "you spent $42."
+
+
+class _FakeAgentStream:
+    def __init__(self, seen: dict[str, Any]):
+        self.seen = seen
+
+    async def __aenter__(self):
+        return _FakeAgentResponse(self.seen)
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeAgentClient:
+    def __init__(self, *, timeout):
+        self.timeout = timeout
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def stream(self, method, url, *, headers, json):
+        _AGENT_SEEN.update(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "timeout": self.timeout,
+            }
+        )
+        return _FakeAgentStream(_AGENT_SEEN)
+
+
+_AGENT_SEEN: dict[str, Any] = {}
+
+
+@pytest.mark.asyncio
+async def test_fetch_agent_weekly_summary_sends_internal_user_id(monkeypatch):
+    _AGENT_SEEN.clear()
+    monkeypatch.setattr(weekly_summary.httpx, "AsyncClient", _FakeAgentClient)
+
+    result = await fetch_agent_weekly_summary("user_123", "http://agent.test/")
+
+    assert result == "Week of Mon, Jun 1: you spent $42."
+    assert _AGENT_SEEN["method"] == "POST"
+    assert _AGENT_SEEN["url"] == "http://agent.test/chat"
+    assert _AGENT_SEEN["headers"] == {"X-MoneyMind-User-Id": "user_123"}
+    assert "Authorization" not in _AGENT_SEEN["headers"]
+    assert _AGENT_SEEN["json"]["message"].startswith("Create my weekly MoneyMind")
+    assert _AGENT_SEEN["raise_for_status_called"] is True
+
+
 @pytest.mark.asyncio
 async def test_post_weekly_summary_creates_inbox_message():
     db = _Db()
     now = datetime(2026, 6, 1, 12, tzinfo=UTC)
 
-    async def fake_fetch(token: str, agent_url: str) -> str:
-        assert token == "jwt"
+    async def fake_fetch(user_id: str, agent_url: str) -> str:
+        assert user_id == "user_123"
         assert agent_url == "http://agent.test"
         return "Week of Mon, Jun 1: you spent $42."
 
     result = await post_weekly_summary(
         db,
         user_id="user_123",
-        user_token="jwt",
         now=now,
         agent_url="http://agent.test",
         fetch_summary=fake_fetch,
@@ -118,22 +183,21 @@ async def test_post_weekly_summary_is_idempotent_for_same_week():
     now = datetime(2026, 6, 1, 12, tzinfo=UTC)
     calls = 0
 
-    async def fake_fetch(token: str, agent_url: str) -> str:
+    async def fake_fetch(user_id: str, agent_url: str) -> str:
         nonlocal calls
+        assert user_id == "user_123"
         calls += 1
         return "summary"
 
     first = await post_weekly_summary(
         db,
         user_id="user_123",
-        user_token="jwt",
         now=now,
         fetch_summary=fake_fetch,
     )
     second = await post_weekly_summary(
         db,
         user_id="user_123",
-        user_token="jwt",
         now=now + timedelta(hours=2),
         fetch_summary=fake_fetch,
     )

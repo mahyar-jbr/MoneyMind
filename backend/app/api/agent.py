@@ -18,7 +18,6 @@ async def run_weekly_summary(
         return await post_weekly_summary(
             get_database(),
             user_id=user.user_id,
-            user_token=user.token,
         )
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(

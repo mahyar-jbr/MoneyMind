@@ -16,7 +16,7 @@ def _week_bounds(now: datetime) -> tuple[datetime, datetime]:
     return week_start, week_start + timedelta(days=7)
 
 
-async def fetch_agent_weekly_summary(user_token: str, agent_url: str) -> str:
+async def fetch_agent_weekly_summary(user_id: str, agent_url: str) -> str:
     prompt = (
         "Create my weekly MoneyMind inbox summary. Use summarize_week, "
         "then reply with only the final summary paragraph."
@@ -25,7 +25,7 @@ async def fetch_agent_weekly_summary(user_token: str, agent_url: str) -> str:
         async with client.stream(
             "POST",
             f"{agent_url.rstrip('/')}/chat",
-            headers={"Authorization": f"Bearer {user_token}"},
+            headers={"X-MoneyMind-User-Id": user_id},
             json={"message": prompt},
         ) as response:
             response.raise_for_status()
@@ -41,7 +41,6 @@ async def post_weekly_summary(
     db: Any,
     *,
     user_id: str,
-    user_token: str,
     now: datetime | None = None,
     agent_url: str | None = None,
     fetch_summary: FetchSummary | None = None,
@@ -66,7 +65,7 @@ async def post_weekly_summary(
 
     fetcher = fetch_summary or fetch_agent_weekly_summary
     summary = await fetcher(
-        user_token,
+        user_id,
         agent_url or os.getenv("AGENT_URL", "http://localhost:8001"),
     )
 
