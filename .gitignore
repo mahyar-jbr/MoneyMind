@@ -35,6 +35,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.swp
+* 2.py
+* 2.ts
+* 2.tsx
+* 2.json
+* 2.md
 
 # Personal AI playbooks (Mahyar's workflow, not team-shared)
 CLAUDE.md
