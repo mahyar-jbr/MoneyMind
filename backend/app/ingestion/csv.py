@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import re
 from dataclasses import dataclass
@@ -21,14 +22,23 @@ def canonicalize_merchant(merchant: str) -> str:
     return canonical or "unknown"
 
 
+def _source_slug(source_name: str | None) -> str:
+    if not source_name:
+        return "upload"
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", source_name.lower()).strip("_")
+    return slug or "upload"
+
+
 def parse_transactions_csv(
     content: bytes,
     *,
     default_user_id: str = "u_482",
     source_date: date | None = None,
+    source_name: str | None = None,
 ) -> ParseResult:
     source_day = source_date or datetime.now(UTC).date()
-    source = f"csv_import_{source_day.isoformat()}"
+    digest = hashlib.sha256(content).hexdigest()[:12]
+    source = f"csv_import_{source_day.isoformat()}_{_source_slug(source_name)}_{digest}"
 
     try:
         text = content.decode("utf-8-sig")
