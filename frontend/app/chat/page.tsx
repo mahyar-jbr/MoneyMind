@@ -4,9 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { streamChat } from "@/lib/chat-stream";
+import { InterventionCard } from "@/components/chat/intervention-card";
+import type { Intervention, InterventionResponse } from "@/lib/interventions";
+import {
+  fetchPendingInterventions,
+  respondToIntervention,
+} from "@/lib/interventions";
 
 type Role = "user" | "assistant";
-type Message = { id: string; role: Role; content: string };
+type ContentMessage = { id: string; role: Role; content: string };
+type InterventionItem = {
+  id: string;
+  kind: "intervention";
+  intervention: Intervention;
+};
+type Message = ContentMessage | InterventionItem;
 
 const SUGGESTIONS = [
   "How can you help me?",
@@ -14,7 +26,7 @@ const SUGGESTIONS = [
   "Help me save money",
 ];
 
-const WELCOME: Message = {
+const WELCOME: ContentMessage = {
   id: "welcome",
   role: "assistant",
   content: "Hi — I'm MoneyMind. What's on your mind?",
@@ -44,13 +56,13 @@ export default function ChatPage() {
     const trimmed = text.trim();
     if (!trimmed || streaming) return;
 
-    const userMsg: Message = {
+    const userMsg: ContentMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: trimmed,
     };
     const assistantId = crypto.randomUUID();
-    const assistantMsg: Message = {
+    const assistantMsg: ContentMessage = {
       id: assistantId,
       role: "assistant",
       content: "",
@@ -63,27 +75,39 @@ export default function ChatPage() {
 
     abortRef.current = new AbortController();
     try {
-      const turn = [...messages, userMsg].map(({ role, content }) => ({
-        role,
-        content,
-      }));
+      const turn = [...messages, userMsg]
+        .filter((m): m is ContentMessage => !("kind" in m))
+        .map(({ role, content }) => ({ role, content }));
       for await (const chunk of streamChat(turn, abortRef.current.signal)) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, content: m.content + chunk } : m,
+            m.id === assistantId && !("kind" in m)
+              ? { ...m, content: m.content + chunk }
+              : m,
           ),
         );
+      }
+      // after each reply, surface any interventions the agent proposed
+      const pending = await fetchPendingInterventions();
+      if (pending.length) {
+        setMessages((prev) => [
+          ...prev,
+          ...pending.map((it) => ({
+            id: it.intervention_id,
+            kind: "intervention" as const,
+            intervention: it,
+          })),
+        ]);
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId
+          m.id === assistantId && !("kind" in m)
             ? {
                 ...m,
                 content:
-                  m.content +
-                  "\n\n(Connection lost — try again in a moment.)",
+                  m.content + "\n\n(Connection lost — try again in a moment.)",
               }
             : m,
         ),
@@ -99,14 +123,56 @@ export default function ChatPage() {
     send(input);
   }
 
+  async function respondTo(
+    itemId: string,
+    interventionId: string,
+    response: InterventionResponse,
+    modifiedParams?: Record<string, string>,
+  ) {
+    await respondToIntervention(interventionId, response, modifiedParams);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === itemId && "kind" in m
+          ? {
+              ...m,
+              intervention: {
+                ...m.intervention,
+                status: response === "ignored" ? "ignored" : "responded",
+                user_response: response,
+                params: modifiedParams
+                  ? { ...m.intervention.params, ...modifiedParams }
+                  : m.intervention.params,
+              },
+            }
+          : m,
+      ),
+    );
+  }
+
   return (
     <AppShell activeHref="/chat">
       <div className="mx-auto flex h-[calc(100svh-3.5rem)] w-full max-w-3xl flex-col">
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           <div className="flex flex-col gap-4">
-            {messages.map((m) => (
-              <Bubble key={m.id} message={m} />
-            ))}
+            {messages.map((m) =>
+              "kind" in m ? (
+                <div key={m.id} className="flex justify-start">
+                  <InterventionCard
+                    intervention={m.intervention}
+                    onRespond={(response, modifiedParams) =>
+                      respondTo(
+                        m.id,
+                        m.intervention.intervention_id,
+                        response,
+                        modifiedParams,
+                      )
+                    }
+                  />
+                </div>
+              ) : (
+                <Bubble key={m.id} message={m} />
+              ),
+            )}
             {messages.length === 1 && (
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
@@ -163,7 +229,7 @@ export default function ChatPage() {
   );
 }
 
-function Bubble({ message }: { message: Message }) {
+function Bubble({ message }: { message: ContentMessage }) {
   const isUser = message.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
