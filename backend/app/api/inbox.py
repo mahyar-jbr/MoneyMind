@@ -13,10 +13,9 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 def _serialize_message(doc: dict[str, Any]) -> dict[str, Any]:
     message = dict(doc)
     message["id"] = str(message.pop("_id"))
-    for field in ("created_at", "read_at"):
-        value = message.get(field)
-        if isinstance(value, datetime):
-            message[field] = value.isoformat()
+    value = message.get("created_at")
+    if isinstance(value, datetime):
+        message["created_at"] = value.isoformat()
     return message
 
 

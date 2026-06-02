@@ -75,13 +75,11 @@ async def post_weekly_summary(
         "type": "weekly_summary",
         "title": "Weekly MoneyMind summary",
         "body": summary,
-        "status": "unread",
         "created_at": now,
-        "read_at": None,
         "metadata": {
             "week_start": week_key,
             "week_end_exclusive": week_end_exclusive.date().isoformat(),
-            "source": "weekly_cron",
+            "source": "user_triggered_weekly_summary",
         },
     }
     result = await db.inbox_messages.insert_one(doc)

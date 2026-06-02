@@ -108,6 +108,8 @@ async def test_post_weekly_summary_creates_inbox_message():
     assert result["week_start"] == "2026-06-01"
     assert db.inbox_messages.docs[0]["user_id"] == "user_123"
     assert db.inbox_messages.docs[0]["body"] == "Week of Mon, Jun 1: you spent $42."
+    assert "status" not in db.inbox_messages.docs[0]
+    assert "read_at" not in db.inbox_messages.docs[0]
 
 
 @pytest.mark.asyncio
@@ -172,7 +174,40 @@ async def test_fire_due_reminders_posts_messages_and_marks_fired():
     result = await fire_due_reminders(db, user_id="user_123", now=now)
 
     assert result["fired"] == 1
+    assert result["skipped"] == 0
     assert db.inbox_messages.docs[0]["body"] == "cancel the trial"
+    assert "status" not in db.inbox_messages.docs[0]
+    assert "read_at" not in db.inbox_messages.docs[0]
     assert db.inbox_messages.docs[0]["metadata"]["reminder_id"] == str(due_id)
     assert db.reminders.docs[0]["status"] == "fired"
     assert db.reminders.docs[1]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_fire_due_reminders_reports_existing_inbox_messages_as_skipped():
+    db = _Db()
+    now = datetime(2026, 6, 1, 12, tzinfo=UTC)
+    reminder_id = ObjectId()
+    db.reminders.docs.append(
+        {
+            "_id": reminder_id,
+            "user_id": "user_123",
+            "fires_at": now - timedelta(minutes=5),
+            "text": "cancel the trial",
+            "source": "user",
+            "status": "pending",
+        }
+    )
+    db.inbox_messages.docs.append(
+        {
+            "_id": ObjectId(),
+            "user_id": "user_123",
+            "type": "reminder",
+            "metadata": {"reminder_id": str(reminder_id)},
+        }
+    )
+
+    result = await fire_due_reminders(db, user_id="user_123", now=now)
+
+    assert result == {"fired": 0, "skipped": 1, "message_ids": []}
+    assert db.reminders.docs[0]["status"] == "fired"

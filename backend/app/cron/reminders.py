@@ -18,6 +18,7 @@ async def fire_due_reminders(
     ).sort("fires_at", 1)
 
     fired = 0
+    skipped = 0
     message_ids: list[str] = []
     async for reminder in cursor:
         reminder_id = str(reminder["_id"])
@@ -33,6 +34,7 @@ async def fire_due_reminders(
                 {"_id": reminder["_id"], "status": "pending"},
                 {"$set": {"status": "fired", "fired_at": now}},
             )
+            skipped += 1
             continue
 
         result = await db.inbox_messages.insert_one(
@@ -41,12 +43,10 @@ async def fire_due_reminders(
                 "type": "reminder",
                 "title": "Reminder",
                 "body": reminder["text"],
-                "status": "unread",
                 "created_at": now,
-                "read_at": None,
                 "metadata": {
                     "reminder_id": reminder_id,
-                    "source": "reminder_cron",
+                    "source": "user_triggered_reminder_sweep",
                     "scheduled_source": reminder.get("source"),
                 },
             }
@@ -58,4 +58,4 @@ async def fire_due_reminders(
         fired += 1
         message_ids.append(str(result.inserted_id))
 
-    return {"fired": fired, "message_ids": message_ids}
+    return {"fired": fired, "skipped": skipped, "message_ids": message_ids}

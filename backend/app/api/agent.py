@@ -7,11 +7,11 @@ from app.cron.weekly_summary import post_weekly_summary
 from app.db.client import get_database
 
 
-router = APIRouter(prefix="/cron", tags=["cron"])
+router = APIRouter(prefix="/agent", tags=["agent"])
 
 
-@router.post("/weekly-summary")
-async def run_weekly_summary_cron(
+@router.post("/run-weekly-summary")
+async def run_weekly_summary(
     user: AuthenticatedUser = Depends(current_user),
 ) -> dict:
     try:
@@ -27,8 +27,8 @@ async def run_weekly_summary_cron(
         ) from exc
 
 
-@router.post("/reminders")
-async def run_reminder_cron(
+@router.post("/run-reminders")
+async def run_reminders(
     user: AuthenticatedUser = Depends(current_user),
 ) -> dict:
     return await fire_due_reminders(get_database(), user_id=user.user_id)

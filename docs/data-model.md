@@ -153,30 +153,6 @@ Did the intervention work? Closes the learning loop.
 
 Agent reads recent outcomes when proposing similar interventions in the future.
 
-## `inbox_messages`
-
-In-app delivery surface for cron output and reminders. Established by `#21`.
-
-```js
-{
-  _id: ObjectId,
-  user_id: "u_482",
-  type: "weekly_summary",              // weekly_summary | reminder
-  title: "Weekly MoneyMind summary",
-  body: "Week of Mon, May 18: ...",    // plain text rendered in the inbox
-  status: "unread",                    // unread | read
-  created_at: ISODate(...),            // UTC, server-stamped by cron
-  read_at: null,                       // UTC when a future read endpoint lands
-  metadata: {
-    source: "weekly_cron",
-    week_start: "2026-05-18",
-    week_end_exclusive: "2026-05-25"
-  }
-}
-```
-
-Indexes: `{ user_id: 1, created_at: -1 }`, `{ user_id: 1, type: 1, metadata.week_start: 1 }`.
-
 ## `reminders`
 
 One-off scheduled pings — user-requested ("remind me to cancel the gym trial in 7 days") or agent-self-scheduled ("checking back in on the bulking goal in 3 days"). **Distinct from interventions:** no approval flow, no outcome measurement, fires once. Established by `#19`.
