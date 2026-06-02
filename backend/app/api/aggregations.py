@@ -1,8 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.aggregations.weekly import weekly_spend_by_category
+from app.auth.clerk import AuthenticatedUser, current_user
 from app.db.client import get_database
 
 
@@ -29,16 +30,16 @@ def parse_date_param(value: str | None, field_name: str, *, upper_bound: bool = 
 
 @router.get("/weekly")
 async def get_weekly_spend(
-    user_id: str = Query(...),
+    user: AuthenticatedUser = Depends(current_user),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     category: str | None = None,
 ) -> dict:
     weeks = await weekly_spend_by_category(
         get_database(),
-        user_id=user_id,
+        user_id=user.user_id,
         date_from=parse_date_param(date_from, "from"),
         date_to_exclusive=parse_date_param(date_to, "to", upper_bound=True),
         category=category,
     )
-    return {"user_id": user_id, "weeks": weeks}
+    return {"user_id": user.user_id, "weeks": weeks}
