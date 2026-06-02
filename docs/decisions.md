@@ -2,6 +2,16 @@
 
 > One entry per non-trivial choice. Three sentences each. New entries at the top.
 
+## 2026-06-01 — CSV re-uploads append when content changes; exact duplicates are cleaned by dedupe
+
+**Context:** The 2026-05-21 CSV ingest decision said duplicate `source` uploads overwrite prior rows. That worked while `source` was a date-only import key, but it caused demo data collisions and doubled rows in Atlas when multiple files shared the same import date. PR `#11b` changes the source key to include upload filename plus a content hash, so a corrected re-upload with different bytes is treated as a new import rather than overwriting the previous one.
+
+**Decision:** CSV import source keys are content-addressed enough for demo scale: `csv_import_<date>_<filename_slug>_<sha256-prefix>`. Re-uploading the exact same file still overwrites same-source rows safely, while re-uploading corrected content appends as a distinct source. Existing doubled Atlas rows are handled by the one-shot exact-row dedupe script, which keeps the oldest `_id` in each duplicate group and deletes later copies only when `--apply` is passed.
+
+**Trade-off:** Historical corrected imports remain visible instead of being replaced in place. Acceptable — it preserves auditability and avoids accidental data loss on demo day; if the product later needs explicit import replacement, that should be a separate import-management feature with user-visible source metadata.
+
+**Revisit:** If real users upload corrected bank exports often enough that old imports clutter analytics. At that point add a first-class `imports` collection and replacement flow instead of overloading `transactions.source`.
+
 ## 2026-06-01 — Tools don't call other tools; agent layer is the composition point
 
 **Context:** `#20 summarize_week` is the first Sprint 2 tool that *could* have called other tools — it naturally wants spend totals (mirror of `#12`'s anomaly substrate), goal pace (`#16`), and could even pre-flag anomalies. The temptation is to import `check_goal_pace` and reuse its 8-verdict ladder. Doing so would create a hidden call-depth nesting: LangGraph's tool-call routing sees ONE tool call from the LLM, but multiple Mongo reads happen, each with its own user_id injection path and its own error surface. That asymmetry breaks every reasoning the LangGraph debugger and the prompt's tool-use philosophy depend on.
