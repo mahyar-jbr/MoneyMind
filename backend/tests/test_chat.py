@@ -50,7 +50,7 @@ _SEEN: dict = {}
 
 
 @pytest.mark.asyncio
-async def test_chat_proxy_forwards_authorization_to_agent(monkeypatch):
+async def test_chat_proxy_forwards_internal_user_id_to_agent(monkeypatch):
     _SEEN.clear()
     monkeypatch.setenv("AGENT_URL", "http://agent.test")
     monkeypatch.setattr(chat_api.httpx, "AsyncClient", _FakeAsyncClient)
@@ -64,7 +64,7 @@ async def test_chat_proxy_forwards_authorization_to_agent(monkeypatch):
     assert body == b"agent reply"
     assert _SEEN["method"] == "POST"
     assert _SEEN["url"] == "http://agent.test/chat"
-    assert _SEEN["headers"]["Authorization"] == "Bearer clerk.jwt"
+    assert "Authorization" not in _SEEN["headers"]
     assert _SEEN["headers"]["X-MoneyMind-User-Id"] == "user_clerk_123"
     assert _SEEN["json"] == {"message": "How am I doing?"}
     assert _SEEN["raise_for_status_called"] is True
