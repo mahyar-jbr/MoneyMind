@@ -16,7 +16,11 @@ The raw operational ledger. Ingested from CSV.
   category: "food.delivery",
   amount: -38.42,                       // negative = outflow
   currency: "USD",
-  source: "csv_import_2026-05-21",
+  source: "csv_import_2026-05-21_synthetic-csv_a1b2c3d4",
+                                        // content-addressed: <date>_<filename-slug>_<sha256-prefix>.
+                                        // Same bytes → same source → overwrite (idempotent re-upload).
+                                        // Different bytes → new source → append (corrected re-upload).
+                                        // Established by #11b after the demo cluster doubled.
   raw: { /* original CSV row */ }
 }
 ```
