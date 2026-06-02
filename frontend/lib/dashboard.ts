@@ -60,19 +60,27 @@ export function formatCurrency(
 }
 
 // "2026-05-04" -> "May 4"
+//
+// Parse and format in UTC: the wire format is a plain ISO date string
+// (no time, no zone) produced by Python `.date().isoformat()` in the
+// backend. Interpreting it in the browser's local timezone caused a
+// one-day drift on screen for users in negative-UTC offsets — #21a.
+// See docs/architecture.md § "Week semantics".
 export function formatWeek(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
 // "2026-05-04" -> "May 4, 2026"
 export function formatDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

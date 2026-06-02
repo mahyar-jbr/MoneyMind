@@ -78,6 +78,24 @@ These apply to every tool under `agent/tools/`. The reviewer Claude treats viola
 8. **External-service tools take an `embedder=None` (or service-specific) kwarg.** Any tool that calls a non-Mongo external service (Voyage, an LLM, an HTTP API) takes an injected callable kwarg in the same pattern as `collection=None`. Tests inject a fake. Established in `#13`'s `recall_memory(*, collection=None, embedder=None)`; mandatory for every subsequent tool that calls Voyage or any other external service.
    - **Same pattern applies to Mongo helpers that mongomock can't simulate.** When a tool delegates to an aggregation helper that uses operators mongomock-motor doesn't implement (e.g. `$dateTrunc`, `$vectorSearch`), inject the helper as a kwarg too — production defaults to the real helper, tests inject a scripted callable. Established in `#20`'s `summarize_week(*, collection=None, goals_collection=None, aggregator=None)`. Same hermeticity guarantee as Voyage injection; same convention, broader scope.
 
+## Week semantics
+
+Decided 2026-06-02 (see `docs/decisions.md`). The wire format for any week reference is a plain ISO date string `YYYY-MM-DD` denoting the Monday that starts the week. No time component, no zone suffix. Five implementations of "week" coexist in the codebase today:
+
+- `agent/tools/summarize_week.py` — Python `weekday()` arithmetic on a `date`, Monday start. Canonical for the agent + cron output.
+- `backend/app/api/cron` — same Python `weekday()`.
+- `backend/app/aggregations/weekly.py` — Mongo `$dateTrunc { unit: "week", startOfWeek: "monday" }` on the stored UTC-midnight `date` field.
+- `agent/tools/get_spend_anomaly.py` — anchored 7-day buckets. Deliberately different (anomaly tool, not calendar). NOT a week formatter.
+- `frontend/lib/dashboard.ts` — `formatWeek` / `formatDate`.
+
+**The contract:**
+
+- Week references on the wire are `YYYY-MM-DD` strings, no time, no zone.
+- The string IS the Monday — UTC-midnight semantics. Anything storing a datetime must use UTC-midnight; anything parsing a string must interpret it as UTC, not local.
+- All formatters that render a week label must parse the string as UTC (`new Date(d + "T00:00:00Z")` in TS; `datetime.combine(d, time(), UTC)` in Python) AND format with `timeZone: "UTC"`. `formatWeek` and `formatDate` in `frontend/lib/dashboard.ts` were patched in `#21a` to enforce this; before the patch they parsed as local time, which would show "May 17" instead of "May 18" for any user in a negative-UTC offset if the backend ever sent a datetime instead of a date string.
+
+Post-freeze: extract a shared `week_bounds(d) -> (date, date)` helper across the four backend/agent call sites so a sixth definition can't sneak in. Tracked as `#21a-helper`.
+
 ## Chat wire format
 
 Decided 2026-05-27 (see `docs/decisions.md`). All three legs use the same format:
