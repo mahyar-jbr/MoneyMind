@@ -74,7 +74,7 @@
 | --- | --------------------------------------------------------------------- | ---------------- | ---- | -------------------------------- |
 | 25  | Agent voice tuning (prompt iteration on 10 scenarios) — see notes below for 4 concrete targets | @mahyar | M | Reads warm + concrete, not robotic |
 | 26  | Frontend animations + visual polish (pitch-deck quality)              | @aidin           | M    | Feels premium on first 5 sec     |
-| 27  | **Demo video — script, record, edit (90s max)**                       | @aidin + all     | L    | `demo.mp4` in repo               |
+| 27  | **Demo video — script, record, edit (90s max)** — Kasra coordinating with videographer team | @kasra | L | `demo.mp4` in repo |
 | 28  | Devpost writeup (cribbed from pitch deck + README)                    | @mahyar          | M    | Draft submitted, link in repo    |
 | 29  | Smoke test full flow on prod with fresh user                          | all              | S    | No errors, no console warnings   |
 | 29a | NEW: `scripts/reset_demo_state.py` — wipe orphan memories/interventions/reminders + reseed transactions to known state. Run before each #27 take. | @mahyar | XS | Known-state recording in 5 seconds vs. orphan-data take |
