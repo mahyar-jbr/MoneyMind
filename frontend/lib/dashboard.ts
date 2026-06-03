@@ -84,3 +84,18 @@ export function formatCategory(category: string): string {
   const clean = part.replace(/_/g, " ");
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
+
+// ISO timestamp -> short relative time ("just now", "2h ago", "3d ago"), else a date
+export function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const min = Math.floor((Date.now() - then) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  if (min < 1440) return `${Math.floor(min / 60)}h ago`;
+  if (min < 10080) return `${Math.floor(min / 1440)}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}

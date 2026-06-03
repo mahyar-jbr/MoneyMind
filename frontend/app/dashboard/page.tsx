@@ -8,13 +8,19 @@ import { StatCards } from "@/components/dashboard/stat-cards";
 import { SpendChart } from "@/components/dashboard/spend-chart";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TransactionsList } from "@/components/dashboard/transactions-list";
-import { getWeekly, getTransactions } from "@/lib/api";
-import type { WeekBucket, Transaction } from "@/lib/types";
+import { Inbox } from "@/components/dashboard/inbox";
+import { getWeekly, getTransactions, getInbox } from "@/lib/api";
+import type { WeekBucket, Transaction, InboxMessage } from "@/lib/types";
 
 type State =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; weeks: WeekBucket[]; transactions: Transaction[] };
+  | {
+      status: "ready";
+      weeks: WeekBucket[];
+      transactions: Transaction[];
+      inbox: InboxMessage[];
+    };
 
 export default function DashboardPage() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -23,6 +29,10 @@ export default function DashboardPage() {
     const ac = new AbortController();
     (async () => {
       try {
+        // inbox is best-effort: if it fails, the dashboard still loads
+        const inboxPromise = getInbox(20, ac.signal)
+          .then((r) => r.messages ?? [])
+          .catch(() => [] as InboxMessage[]);
         const [weekly, tx] = await Promise.all([
           getWeekly(ac.signal),
           getTransactions(25, ac.signal),
@@ -31,6 +41,7 @@ export default function DashboardPage() {
           status: "ready",
           weeks: weekly.weeks ?? [],
           transactions: tx.transactions ?? [],
+          inbox: await inboxPromise,
         });
       } catch {
         if (!ac.signal.aborted) setState({ status: "error" });
@@ -69,7 +80,10 @@ export default function DashboardPage() {
               <SpendChart weeks={state.weeks} currency={currency} />
               <div className="grid gap-6 lg:grid-cols-2">
                 <CategoryBreakdown weeks={state.weeks} currency={currency} />
-                <TransactionsList transactions={state.transactions} />
+                <div className="flex flex-col gap-6">
+                  <Inbox messages={state.inbox} />
+                  <TransactionsList transactions={state.transactions} />
+                </div>
               </div>
             </div>
           )
