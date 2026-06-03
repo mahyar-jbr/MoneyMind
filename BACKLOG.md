@@ -72,12 +72,22 @@
 
 | #   | Item                                                                  | Owner            | Size | Demo proof                       |
 | --- | --------------------------------------------------------------------- | ---------------- | ---- | -------------------------------- |
-| 25  | Agent voice tuning (prompt iteration on 10 scenarios)                 | @mahyar          | M    | Reads warm + concrete, not robotic |
+| 25  | Agent voice tuning (prompt iteration on 10 scenarios) — see notes below for 4 concrete targets | @mahyar | M | Reads warm + concrete, not robotic |
 | 26  | Frontend animations + visual polish (pitch-deck quality)              | @aidin           | M    | Feels premium on first 5 sec     |
 | 27  | **Demo video — script, record, edit (90s max)**                       | @aidin + all     | L    | `demo.mp4` in repo               |
 | 28  | Devpost writeup (cribbed from pitch deck + README)                    | @mahyar          | M    | Draft submitted, link in repo    |
 | 29  | Smoke test full flow on prod with fresh user                          | all              | S    | No errors, no console warnings   |
+| 29a | NEW: `scripts/reset_demo_state.py` — wipe orphan memories/interventions/reminders + reseed transactions to known state. Run before each #27 take. | @mahyar | XS | Known-state recording in 5 seconds vs. orphan-data take |
 | 30  | Tag `v1.0` and freeze main branch                                     | @mahyar          | S    | Tag pushed, branch protected     |
+
+**#25 tuning targets** (concrete iteration list, verified against live demo transcripts):
+
+(a) When `summarize_week` returns `total_spend=0` AND recent goal data exists, prompt should nudge Gemini to either retry with `week_offset=-1` OR explicitly say "no data this calendar week, here's last week." Today Gemini's reply says "you haven't recorded any spending this week" — true but unhelpful. **Verified still open 2026-06-03:** the CSV's last week is 2026-05-18-24, dedup didn't extend the date range, so "this week" (Jun 1-7) is still empty.
+(b) When `active_context_block` is injected into the system message, prompt should reference it explicitly in the reply. Wiring proved correct in `#11a` (active context retrievable end-to-end), but Gemini ignored it on Turn 3.
+(c) `summarize_week`'s paragraph template is rigid v1. Once we have 10 real weekly digests on real data, soften the deterministic phrasing without losing the whole-dollar / no-markdown contract.
+(d) Empirical from `#17a-wire` live demo: when the user says "I want a Sunday reminder," Gemini described it in prose instead of calling `propose_intervention`. Teach the LLM: (i) on commitment to a proposal, CALL the tool, THEN paraphrase; (ii) on user's response turn, call `respond_to_intervention` BEFORE writing memory; (iii) only `write_memory` if confidence > 0.5 AND ≥2 evidence pieces.
+
+**Primitive to use:** `agent/scripts/demo_graph_full.py` records which tools Gemini picks per turn — that's the feedback loop. Avoid burning the 20/day Gemini quota on speculative tuning; budget ~8 takes for #25, save the rest for #27 recording.
 
 ---
 
@@ -87,14 +97,8 @@
 
 | #   | Status | Item                                                                | Owner    | Size | Why                                                  |
 | --- | ------ | ------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------- |
-| 22a | ✅ done (2026-06-02) | **Real backend for the intervention loop** | @kasra | S | LANDED (PR #49 merged). Two thin endpoints: `GET /interventions/pending` (uses #17b index, sort proposed_at DESC) + `POST /interventions/{id}/respond` (delegates to agent's #17a tool — single source of truth, no parallel Mongo update path). 5 hermetic tests; 400/404/409 mapping verified against #17a's actual exception strings. **Slide-8 is now real on camera, not theater.** Aidin's swap follow-up tracked as #22a-swap. |
-| 22a-swap | 🟡 **demo-critical, 30-60 min** | **Aidin swaps the two mock seams in `frontend/lib/interventions.ts`** for real `fetch()` calls to `/api/interventions/pending` and `/api/interventions/{id}/respond`. Add matching proxy routes under `frontend/app/api/interventions/` (Clerk-bearer-forward, same pattern as `/api/transactions`). Smoke-test against real agent writes via chat. | @aidin | XS | Surfaced by #49 review. Without this, the live backend is invisible to the demo — card still fires hardcoded reminder. **Run alongside #23a tonight.** |
-| 23a | 🟡 **SHIP TONIGHT** | **Dashboard must render `/inbox`** — Kasra's #21 ships JSON at GET `/inbox` with weekly-summary + reminder messages. Wire a new component on `/dashboard` that fetches via a Clerk-gated proxy route (`/api/inbox`, same shape as the existing `/api/agg/weekly` proxy). Render the message list with title + body + relative timestamp. Don't need write/dismiss for v1 — just visible surface. | @aidin | S | Mahyar's call: option (a). Re-flagged 3× (#21 + #23 + #45 reviews). **Deadline: EOD Jun 3.** Run AFTER #22a's mock swap, OR in parallel if Aidin can context-switch. |
-| 13b | 🧊 **post-freeze (stay on free tier through demo)** | **External-service rate-limit hardening (Voyage + Gemini).** Voyage free tier ~3 RPM; Gemini free tier 20 generate_content/day. Decision 2026-06-02: **stay on free tier through the demo recording.** Ration the Gemini quota across team's #25 voice tuning and demo takes; if we 429 during a final take, the pre-recorded fallback is the mitigation (per Risk row). Re-evaluate post-freeze if pilot users sign up. | @mahyar | S | Mahyar's call. Cost vs. ~$10/mo Gemini upgrade not worth it for hackathon scope; #25 iteration just needs careful pacing. |
-| 25p | ⬜ todo | **Prompt + template tuning targets** (folds into Sprint 3 #25). (a) When "this week" has no data, fall back to the most recent populated week — same semantics as #12, surfaced in #11a's live demo. (b) When `active_context_block` is injected, reference it explicitly in the reply — wiring provably correct but Gemini ignored it on #11a's Turn 3. (c) `summarize_week`'s paragraph template is rigid v1 — once we have 10 real weekly digests on real data, soften the deterministic phrasing without losing the whole-dollar / no-markdown contract. (d) **Reinforced by #17-wire's live demo**: when `summarize_week` returns `total_spend=0` AND recent goal data exists, the prompt should nudge Gemini to either retry with `week_offset=-1` OR explicitly say "no data this calendar week, here's last week." Today Gemini's reply says "you haven't recorded any spending this week" — technically true but unhelpful when the auditable CSV ends a week ago. **Primitive to use:** `agent/scripts/demo_graph_full.py` instruments which tools Gemini actually picks in a real turn — that's the feedback loop voice-tuning needs. | @mahyar | — | Not a separate Sprint 2 ticket; pre-loads #25's iteration list. |
-| 11a-1 | 🧊 post-freeze | **Migrate `langgraph.prebuilt.create_react_agent` → `langchain.agents.create_agent`.** Pytest emits `LangGraphDeprecatedSinceV10` warning. Working as of langgraph 1.x; will need to move before LangGraph 2.0. | @mahyar | S | Surfaced by #11a. Pure rename + import swap. |
-| 9b  | 🧊 post-freeze | **Agent boot ergonomics** — drop the `PYTHONPATH=..` requirement. Editable install via hatchling caused pytest to hang in #9; the current `PYTHONPATH=..` workaround is documented in `agent/README.md`. | @mahyar | S | Cosmetic; not on the critical path. |
-| 3a  | 🧊 post-freeze | **Optionally configure Atlas auto-embed on `memories.summary`.** The current working pattern (writers call `voyage.embed_document()` before insert) is decided + logged. If we ever flip auto-embed, drop the explicit embed call from #14 + #21. | @mahyar | S | Reversible later; no demo impact. |
+| 22a-swap | 🚨 **SHIP TOMORROW MORNING (2026-06-03 AM)** | **Aidin swaps the two mock seams in `frontend/lib/interventions.ts`** for real `fetch()` calls to `/api/interventions/pending` and `/api/interventions/{id}/respond`. Add matching proxy routes under `frontend/app/api/interventions/` (Clerk-bearer-forward, same pattern as `/api/transactions`). Smoke-test against real agent writes via chat. | @aidin | XS | Surfaced by #49 review. **Tomorrow AM is the only window before #25 voice tuning needs the surface final.** Until this lands, the slide-8 card is still mock theater. |
+| 23a-seed | 🟡 **before recording** | **Trigger `/agent/run-weekly-summary` + `/agent/run-reminders` against the demo user** so the inbox has populated content on camera. POST both endpoints once before each take. | @mahyar | XS | Surfaced by #50 review. 30 seconds of curl per take. |
 
 ---
 
@@ -104,12 +108,6 @@
 - Re-record video if needed.
 - Finalize Devpost copy. Have all three teammates review.
 - Practice the live demo walkthrough at least 3x.
-
-**Demoted from Sprint 2 follow-ups 2026-06-02 (not on critical path):**
-- **#13a** mark_memory_used — bumps `last_used` + `use_count` on consumption. Demo-visible only if a memory inspector surfaces use_count; we don't ship one. (@mahyar, S)
-- **#23c** Goals + memories widgets on dashboard. Pitch-deck "memory of you" wedge already lands in chat via `recall_memory`; dashboard isn't the only surface. (@aidin + @kasra, M)
-- **#21a-helper** Extract a shared `week_bounds(d) -> (date, date)` helper across the four backend/agent call sites that compute week boundaries. The wire contract is pinned in `architecture.md § Week semantics`; the helper would prevent a sixth definition from sneaking in. (@mahyar, S)
-- **#22a-typed-exc** Replace #17a tool's stringly-typed errors with a typed exception class (`AlreadyRespondedError`) the backend can `except` directly. Today the backend's 409 classifier matches the substring `"already in status"` against `respond_to_intervention.py:109` — works, but silent-drift risk if either side changes the message. Surfaced by #49 review. (@mahyar, S)
 
 ---
 
@@ -128,7 +126,7 @@
 | Risk                                          | Likelihood | Mitigation                                             |
 | --------------------------------------------- | ---------- | ------------------------------------------------------ |
 | Vector search latency too high                | Low        | Cache top-k recalls per user · pre-embed on write      |
-| Gemini rate limits during demo                | Medium     | Pre-record fallback video · stub responses ready       |
+| Gemini free-tier 20 req/day during demo       | **High**   | **Pre-record fallback IS the plan, not the backup** — ration takes: ~8 for #25 voice tuning, rest for #27 recording. Decided 2026-06-02 to stay free-tier through demo; revisit post-freeze if pilots sign up. |
 | Synthetic dataset feels fake on camera        | High       | @kasra spends extra time on realistic patterns wk 1    |
 | Demo video runs over 90s                      | High       | Storyboard before recording · cut one beat if needed   |
 | One teammate gets sick / disappears 48h       | Low        | Each swim lane shippable independently (see slide 14)  |
