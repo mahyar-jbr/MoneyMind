@@ -1,6 +1,27 @@
 # MoneyMind — Product Backlog
 
-**Code freeze:** 2026-06-04 (Thursday) · **Submission:** 2026-06-11
+**Code freeze:** 2026-06-04 (Thursday) · **Submission:** 2026-06-11 @ 2:00 PM PT
+
+---
+
+## 🚨 RULES-COMPLIANCE BLOCKERS (audit 2026-06-03)
+
+> Audit of [Google Cloud Rapid Agent Hackathon rules](https://rapid-agent.devpost.com/rules) surfaced three potentially-disqualifying gaps. Must close before submission. **Voice tuning (#25) is in progress and stays the active workstream tonight; these are post-tuning.**
+
+| # | Status | Item | Owner | Size | Why |
+| --- | ------ | ---- | ----- | ---- | --- |
+| R1  | 🚨 **MANDATORY** | **Revive #24 — wire MongoDB MCP Server into agent.** Rules require "integrate a Partner Entity's MCP server." MongoDB track = MongoDB MCP. One `mcp_explain` tool calling the MongoDB MCP server is the bare-minimum bar. Doesn't need to be elegant — needs to exist and be live-callable on submission. | @mahyar | M (4-6h) | Cutting #24 yesterday based on demo-impact ignored rules-impact. Without MCP integration, MongoDB-track submission is ineligible. |
+| R2  | 🚨 **MANDATORY** | **Migrate Gemini calls from AI Studio → Vertex AI.** Rules require "Google Cloud AI tools." AI Studio is consumer/non-GCP; Vertex AI is the GCP surface. Code change: `ChatGoogleGenerativeAI` → `ChatVertexAI` in `agent/graphs/main.py`. Set up GCP service account + Vertex AI API. Verify Gemini 2.5 Flash availability on Vertex AI. | @mahyar | S (2-4h) | Ineligibility risk. Small code change but requires GCP project + billing setup. |
+| R3  | ⚠️ **RESEARCH FIRST** | **Verify "Google Cloud Agent Builder" requirement is satisfiable with LangGraph + Vertex AI.** Rules state: "powered by Gemini and Google Cloud Agent Builder" AND "all other AI tools are not permitted." `langgraph.prebuilt.create_react_agent` is NOT Agent Builder by name. Research the MongoDB-track resources page + Fivetran Q&A webinar before refactoring — Agent Builder may be an umbrella term that LangGraph-on-Vertex satisfies. | @mahyar | S research → ? rebuild | If LangGraph-on-Vertex doesn't satisfy, this could be an XL refactor. Research first to size correctly. |
+| R4  | ⚠️ **likely required** | **Live hosted URL** at submission. Vercel (frontend) + Railway (backend+agent in one container) per yesterday's plan. Clerk prod keys, prod Gemini key (separate quota), prod env vars in both hosts. | @mahyar | M (3-4h) | Rules require judge-clickable URL. GitHub + video alone is not sufficient. |
+| R5  | ⚠️ **required** | **Add OSI-approved LICENSE file** to repo root, visible in GitHub repo "About." MIT is fine — pick, commit, push. | @mahyar | XS (5min) | Required deliverable. |
+| R6  | ⚠️ **verify** | **Originality clause check.** Rules require project "newly created during the Contest Period." Verify MoneyMind's first commit date is inside the contest window. Run: `git log --reverse --format="%ai" \| head -1` and confirm against contest start date. | @mahyar | XS | If first commit pre-dates contest start, may need disclosure or re-scope discussion. |
+| R7  | ⚠️ **maybe required** | **Audit Voyage AI usage.** Rules "all other AI tools are not permitted" may exclude third-party embedding services. Safer path: swap Voyage `voyage-3` → Vertex AI `text-embedding-005` or `gemini-embedding-001`. Atlas vector index would need re-creation at new dimension (768 or 3072 vs. current 1024). | @mahyar | M (rebuild + reindex) | If interpreted strictly, Voyage disqualifies. Defer until R3 research clarifies the rules' tool-allow-list. |
+| R8  | ⚠️ **verify** | **Devpost writeup requirements.** Check Devpost form for required sections, word counts, image counts, video upload location (YouTube/Vimeo vs. Devpost-hosted), track selection field. Folds into #28. | @mahyar | XS | Cheap to check tonight, expensive to miss at submission. |
+| R9  | ⚠️ **verify** | **Demo video constraints.** Rules say max 3 min (not the 90s the team's been targeting), YouTube/Vimeo hosting, English/subtitled, no 3rd-party logos/ads. Pass to Kasra + videographer team. | @kasra | XS to verify, L to rebuild if our 90s plan was wrong | Cheap to check. If 3 min is right, we have more runway than expected. |
+| R10 | ⚠️ **scope shift** | **Re-audit `agent/embeddings/voyage.py`, `requirements.txt`, and any LLM call sites** for non-Google-AI dependencies that need migration if R3 confirms strict tool-allow-list. Includes langchain-google-genai (already covered by R2), Voyage (covered by R7), and any others. | @mahyar | depends on R3 | Scope of this row depends on R3's verdict. |
+
+---
 
 ## Legend
 
@@ -76,8 +97,7 @@
 | 26  | Frontend animations + visual polish (pitch-deck quality)              | @aidin           | M    | Feels premium on first 5 sec     |
 | 27  | **Demo video — script, record, edit (90s max)** — Kasra coordinating with videographer team | @kasra | L | `demo.mp4` in repo |
 | 28  | Devpost writeup (cribbed from pitch deck + README)                    | @mahyar          | M    | Draft submitted, link in repo    |
-| 29  | Smoke test full flow on prod with fresh user                          | all              | S    | No errors, no console warnings   |
-| 29a | NEW: `scripts/reset_demo_state.py` — wipe orphan memories/interventions/reminders + reseed transactions to known state. Run before each #27 take. | @mahyar | XS | Known-state recording in 5 seconds vs. orphan-data take |
+| 29  | Smoke test full flow on the LIVE deployed URL (post-R4) with fresh user | all | S | No errors, no console warnings on prod |
 | 30  | Tag `v1.0` and freeze main branch                                     | @mahyar          | S    | Tag pushed, branch protected     |
 
 **#25 tuning targets** (concrete iteration list, verified against live demo transcripts):
@@ -97,8 +117,8 @@
 
 | #   | Status | Item                                                                | Owner    | Size | Why                                                  |
 | --- | ------ | ------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------- |
-| 22a-swap | 🚨 **SHIP TOMORROW MORNING (2026-06-03 AM)** | **Aidin swaps the two mock seams in `frontend/lib/interventions.ts`** for real `fetch()` calls to `/api/interventions/pending` and `/api/interventions/{id}/respond`. Add matching proxy routes under `frontend/app/api/interventions/` (Clerk-bearer-forward, same pattern as `/api/transactions`). Smoke-test against real agent writes via chat. | @aidin | XS | Surfaced by #49 review. **Tomorrow AM is the only window before #25 voice tuning needs the surface final.** Until this lands, the slide-8 card is still mock theater. |
-| 23a-seed | 🟡 **before recording** | **Trigger `/agent/run-weekly-summary` + `/agent/run-reminders` against the demo user** so the inbox has populated content on camera. POST both endpoints once before each take. | @mahyar | XS | Surfaced by #50 review. 30 seconds of curl per take. |
+| 22a-swap | 🚨 **demo-critical** | **Aidin swaps the two mock seams in `frontend/lib/interventions.ts`** for real `fetch()` calls to `/api/interventions/pending` and `/api/interventions/{id}/respond`. Add matching proxy routes under `frontend/app/api/interventions/` (Clerk-bearer-forward, same pattern as `/api/transactions`). Smoke-test against real agent writes via chat. | @aidin | XS | Slide-8 card is still mock theater until this lands. Blocks #27 recording. |
+| 23a-seed | 🟡 **before recording** | **Trigger `/agent/run-weekly-summary` + `/agent/run-reminders` against the demo user** so the inbox has populated content on camera. POST both endpoints once before each take. | @mahyar | XS | 30 seconds of curl per take. |
 
 ---
 
@@ -125,8 +145,9 @@
 
 | Risk                                          | Likelihood | Mitigation                                             |
 | --------------------------------------------- | ---------- | ------------------------------------------------------ |
+| **Rules-compliance disqualification**         | **Critical** | **R1-R10 above must all close before submission.** MCP integration revival (R1), Vertex AI migration (R2), Agent Builder verification (R3) are the three load-bearing ones. PM missed this audit at sprint start — caught 2026-06-03. |
 | Vector search latency too high                | Low        | Cache top-k recalls per user · pre-embed on write      |
-| Gemini free-tier 20 req/day during demo       | **High**   | **Pre-record fallback IS the plan, not the backup** — ration takes: ~8 for #25 voice tuning, rest for #27 recording. Decided 2026-06-02 to stay free-tier through demo; revisit post-freeze if pilots sign up. |
+| Gemini free-tier 20 req/day during demo       | **High**   | **Pre-record fallback IS the plan, not the backup** — ration takes: ~8 for #25 voice tuning, rest for #27 recording. Decided 2026-06-02 to stay free-tier through demo. **Will be re-decided after R2** — Vertex AI billing changes the equation. |
 | Synthetic dataset feels fake on camera        | High       | @kasra spends extra time on realistic patterns wk 1    |
 | Demo video runs over 90s                      | High       | Storyboard before recording · cut one beat if needed   |
 | One teammate gets sick / disappears 48h       | Low        | Each swim lane shippable independently (see slide 14)  |
