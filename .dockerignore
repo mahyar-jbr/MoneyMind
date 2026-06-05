@@ -1,0 +1,39 @@
+# Keep image small — exclude every locally-built artifact.
+
+# Frontend (not in this image; lives on Vercel).
+frontend
+
+# Local virtualenvs.
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+
+# Secrets that must NEVER ship into a layer.
+.env
+.env.local
+.env.*.local
+.gcloud
+**/.gcloud
+
+# Dev/CI/scratch.
+.git
+.github
+.vscode
+.idea
+.DS_Store
+*.log
+
+# Docs + tests don't need to live in prod image (smaller layer cache).
+**/tests
+docs
+BACKLOG.md
+STANDUP.md
+README.md
+*.md
+moneymind-pitch.html
+
+# But keep these — needed at runtime / runtime detection.
+!agent/README.md
+!backend/README.md
