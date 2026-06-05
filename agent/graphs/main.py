@@ -22,7 +22,7 @@ from typing import Annotated, Any, NotRequired
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from pydantic import BaseModel, create_model
@@ -250,10 +250,18 @@ def _prompt_builder(state: dict) -> list:
 
 
 def _build_llm() -> BaseChatModel:
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set")
-    return ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
+    """Build a Vertex AI chat model.
+
+    Auth: `GOOGLE_APPLICATION_CREDENTIALS` (path to service-account JSON) is
+    the only credential needed — `ChatVertexAI` discovers it via google-auth's
+    default ADC chain. `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` pin
+    the region.
+    """
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+    if not project:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT is not set")
+    return ChatVertexAI(model=MODEL_NAME, project=project, location=location)
 
 
 def build_graph(

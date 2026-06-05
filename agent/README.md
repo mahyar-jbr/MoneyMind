@@ -52,7 +52,7 @@ load_dotenv("../.env")
 Variables this service uses:
 - `MONGODB_URI`
 - `MONGODB_DB`
-- `GEMINI_API_KEY`
+- `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GOOGLE_APPLICATION_CREDENTIALS` (Vertex AI auth, R2)
 - `VOYAGE_API_KEY`
 - `MCP_ENABLED`, `MCP_SERVER_URL` (Sprint 2)
 
