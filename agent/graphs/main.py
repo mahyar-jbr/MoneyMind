@@ -22,7 +22,7 @@ from typing import Annotated, Any, NotRequired
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
-from langchain_google_vertexai import ChatVertexAI
+from langchain_google_vertexai.chat_models import ChatVertexAI
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from pydantic import BaseModel, create_model
