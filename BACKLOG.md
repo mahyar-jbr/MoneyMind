@@ -4,22 +4,38 @@
 
 ---
 
-## 🚨 RULES-COMPLIANCE BLOCKERS (audit 2026-06-03)
+## 🚨 RULES-COMPLIANCE WORK (research complete 2026-06-05)
 
-> Audit of [Google Cloud Rapid Agent Hackathon rules](https://rapid-agent.devpost.com/rules) surfaced three potentially-disqualifying gaps. Must close before submission. **Voice tuning (#25) is in progress and stays the active workstream tonight; these are post-tuning.**
+> Deep research pass complete. **R3 verdict: PERMISSIVE (~85% confidence)** — Google ships their own LangGraph template for Agent Builder, so the current stack does NOT need a reasoning-layer rewrite. R5 + R6 confirmed easier than expected. R7 Voyage flips to "keep with README disclosure" (Voyage is listed as an official MongoDB-track resource on the hackathon's own page). Net dev work under permissive: **~12-16 hours**.
+>
+> Full research doc with verbatim rule citations, GCP setup steps, and source URLs lives in chat — paste to eng tab when starting any of these.
 
-| # | Status | Item | Owner | Size | Why |
-| --- | ------ | ---- | ----- | ---- | --- |
-| R1  | 🚨 **MANDATORY** | **Revive #24 — wire MongoDB MCP Server into agent.** Rules require "integrate a Partner Entity's MCP server." MongoDB track = MongoDB MCP. One `mcp_explain` tool calling the MongoDB MCP server is the bare-minimum bar. Doesn't need to be elegant — needs to exist and be live-callable on submission. | @mahyar | M (4-6h) | Cutting #24 yesterday based on demo-impact ignored rules-impact. Without MCP integration, MongoDB-track submission is ineligible. |
-| R2  | 🚨 **MANDATORY** | **Migrate Gemini calls from AI Studio → Vertex AI.** Rules require "Google Cloud AI tools." AI Studio is consumer/non-GCP; Vertex AI is the GCP surface. Code change: `ChatGoogleGenerativeAI` → `ChatVertexAI` in `agent/graphs/main.py`. Set up GCP service account + Vertex AI API. Verify Gemini 2.5 Flash availability on Vertex AI. | @mahyar | S (2-4h) | Ineligibility risk. Small code change but requires GCP project + billing setup. |
-| R3  | ⚠️ **RESEARCH FIRST** | **Verify "Google Cloud Agent Builder" requirement is satisfiable with LangGraph + Vertex AI.** Rules state: "powered by Gemini and Google Cloud Agent Builder" AND "all other AI tools are not permitted." `langgraph.prebuilt.create_react_agent` is NOT Agent Builder by name. Research the MongoDB-track resources page + Fivetran Q&A webinar before refactoring — Agent Builder may be an umbrella term that LangGraph-on-Vertex satisfies. | @mahyar | S research → ? rebuild | If LangGraph-on-Vertex doesn't satisfy, this could be an XL refactor. Research first to size correctly. |
-| R4  | ⚠️ **likely required** | **Live hosted URL** at submission. Vercel (frontend) + Railway (backend+agent in one container) per yesterday's plan. Clerk prod keys, prod Gemini key (separate quota), prod env vars in both hosts. | @mahyar | M (3-4h) | Rules require judge-clickable URL. GitHub + video alone is not sufficient. |
-| R5  | ⚠️ **required** | **Add OSI-approved LICENSE file** to repo root, visible in GitHub repo "About." MIT is fine — pick, commit, push. | @mahyar | XS (5min) | Required deliverable. |
-| R6  | ⚠️ **verify** | **Originality clause check.** Rules require project "newly created during the Contest Period." Verify MoneyMind's first commit date is inside the contest window. Run: `git log --reverse --format="%ai" \| head -1` and confirm against contest start date. | @mahyar | XS | If first commit pre-dates contest start, may need disclosure or re-scope discussion. |
-| R7  | ⚠️ **maybe required** | **Audit Voyage AI usage.** Rules "all other AI tools are not permitted" may exclude third-party embedding services. Safer path: swap Voyage `voyage-3` → Vertex AI `text-embedding-005` or `gemini-embedding-001`. Atlas vector index would need re-creation at new dimension (768 or 3072 vs. current 1024). | @mahyar | M (rebuild + reindex) | If interpreted strictly, Voyage disqualifies. Defer until R3 research clarifies the rules' tool-allow-list. |
-| R8  | ⚠️ **verify** | **Devpost writeup requirements.** Check Devpost form for required sections, word counts, image counts, video upload location (YouTube/Vimeo vs. Devpost-hosted), track selection field. Folds into #28. | @mahyar | XS | Cheap to check tonight, expensive to miss at submission. |
-| R9  | ⚠️ **verify** | **Demo video constraints.** Rules say max 3 min (not the 90s the team's been targeting), YouTube/Vimeo hosting, English/subtitled, no 3rd-party logos/ads. Pass to Kasra + videographer team. | @kasra | XS to verify, L to rebuild if our 90s plan was wrong | Cheap to check. If 3 min is right, we have more runway than expected. |
-| R10 | ⚠️ **scope shift** | **Re-audit `agent/embeddings/voyage.py`, `requirements.txt`, and any LLM call sites** for non-Google-AI dependencies that need migration if R3 confirms strict tool-allow-list. Includes langchain-google-genai (already covered by R2), Voyage (covered by R7), and any others. | @mahyar | depends on R3 | Scope of this row depends on R3's verdict. |
+### Do tonight — free wins, ~45 min total
+
+| # | Status | Item | Owner | Size |
+| --- | ------ | ---- | ----- | ---- |
+| R5 | ⬜ **do now** | **MIT LICENSE at repo root.** Copyright line names Mahyar + Kasra + Aidin. GitHub auto-detects + shows in About sidebar. | @mahyar | XS (5min) |
+| R6 | ✅ **PASSES — close** | Originality: first commit 2026-05-21, contest started 2026-05-05. **16 days inside window. No remediation.** Verified via `git log --reverse`. | @mahyar | DONE |
+| R3-confirm | ⬜ **do now** | **Post R3 disambiguation question** to Devpost discussion forum + hackathon Discord. Phrasing template in research doc. Insurance against the 15% strict-reading risk; organizer answer arrives <24h. | @mahyar | XS (10min) |
+| R8 | ⬜ **do now** | **Start Devpost draft submission**, walk every field, screenshot the form schema, save draft. Send team-member invites tonight so nobody's locked out 4pm Jun 11. | @mahyar | XS (30-45min) |
+
+### Do tomorrow — mandatory pre-submission
+
+| # | Status | Item | Owner | Size |
+| --- | ------ | ---- | ----- | ---- |
+| R1 | 🚨 **MANDATORY** | **Wire MongoDB MCP Server.** Subprocess (`npx mongodb-mcp-server@latest --read-only --connectionString $MONGODB_URI`) via `langchain-mcp-adapters` `MultiServerMCPClient`. Surface `aggregate` + `collection-schema` MCP tools into existing `create_react_agent(tools=[...])` list. Demo turn: "what does my data look like?" → agent calls `collection-schema` on transactions. **Read-only mode non-negotiable.** Dockerfile needs Node 20.19+ alongside Python. README must name it. | @mahyar | M (4-6h) |
+| R2 | 🚨 **MANDATORY** | **Migrate to Vertex AI.** `pip uninstall langchain-google-genai && pip install langchain-google-vertexai`. Swap `ChatGoogleGenerativeAI` → `ChatVertexAI(model="gemini-2.5-flash", project=..., location="us-central1")`. GCP project + service account + `roles/aiplatform.user` + JSON key. Env vars: `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`. Remove `GOOGLE_API_KEY`. **$300 free trial covers entire demo** ($0.30/$2.50 per 1M tokens). | @mahyar | S (2-4h) |
+| R4 | 🚨 **MANDATORY** | **Live hosted URL** at submission. Vercel for frontend + Railway for backend+agent (custom Dockerfile with Node + Python for MCP subprocess). Keep both up through mid-July 2026 (judging window). Clerk prod keys, prod env vars, prod smoke test. | @mahyar | M (3-4h) |
+| R9 | ⬜ **scope shift** | **Demo video: re-target 2:00-2:30, not 90s.** Cap is 3 min; 90s was self-imposed. Extra ~60-90s = room for MCP-tool-firing-on-camera (eligibility proof), vector recall, intervention + outcome round-trip, memory-write-then-surface beat. Tell @kasra + videographer team. | @kasra | XS scope-shift |
+
+### Confirmed safe — close & forget
+
+- **R7 Voyage AI: KEEP.** Voyage is on hackathon's own MongoDB-track resources page (`rapid-agent.devpost.com/details/mongodb-resources`). One-line README disclosure citing that URL is the entire fix. **Saves 4-6h of vector-index rebuild.**
+- **R10 Dep audit:** under PERMISSIVE, only R1+R2 dep changes needed. LangGraph, Voyage, Clerk, MongoDB Atlas, Next.js, FastAPI all safe.
+
+### If R3 disambiguation returns STRICT (insurance plan, do NOT pre-emptively start)
+
+Re-opens R7 (Voyage → Vertex embedding, 4-6h, full vector reindex) + adds LangGraph → ADK port (~1 day). Tight but doable in 5 days **only if** the strict ruling lands before Saturday morning. Track the R3-confirm response actively this weekend.
 
 ---
 
