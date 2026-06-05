@@ -151,7 +151,7 @@ export default function ChatPage() {
 
   return (
     <AppShell activeHref="/chat">
-      <div className="mx-auto flex h-[calc(100svh-3.5rem)] w-full max-w-3xl flex-col">
+      <div className="mx-auto flex h-[calc(100svh-4rem)] w-full max-w-3xl flex-col">
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           <div className="flex flex-col gap-4">
             {messages.map((m) =>
