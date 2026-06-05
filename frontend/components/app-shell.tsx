@@ -15,16 +15,16 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="sticky top-0 z-10 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 text-sm font-bold text-zinc-950">
-              M
-            </span>
-            <span className="font-semibold tracking-tight">MoneyMind</span>
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[color:var(--color-bg)]/40 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-6">
+          <Link
+            href="/"
+            className="text-2xl font-semibold tracking-tight text-[color:var(--color-fg)]"
+          >
+            <span className="text-[color:var(--color-accent)]">Money</span>Mind
           </Link>
 
-          <nav className="flex items-center gap-1 text-sm">
+          <nav className="flex items-center gap-1.5 text-sm">
             {NAV.map((item) => {
               const active = activeHref === item.href;
               return (
@@ -33,15 +33,15 @@ export function AppShell({
                   href={item.href}
                   className={
                     active
-                      ? "rounded-full bg-[color:var(--color-surface-hi)] px-3 py-1.5 font-medium text-foreground"
-                      : "rounded-full px-3 py-1.5 font-medium text-[color:var(--color-fg-muted)] hover:bg-[color:var(--color-surface)] hover:text-foreground"
+                      ? "rounded-full bg-white/[0.08] px-3.5 py-1.5 font-medium text-[color:var(--color-fg)]"
+                      : "rounded-full px-3.5 py-1.5 font-medium text-[color:var(--color-fg-muted)] transition-colors hover:bg-white/[0.06] hover:text-[color:var(--color-fg)]"
                   }
                 >
                   {item.label}
                 </Link>
               );
             })}
-            <div className="ml-2">
+            <div className="ml-1.5">
               <UserButton />
             </div>
           </nav>
