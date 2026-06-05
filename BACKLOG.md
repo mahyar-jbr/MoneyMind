@@ -6,13 +6,17 @@
 
 ## 🚨 RULES-COMPLIANCE
 
+> Execution order matters: R2 swaps the LLM layer (changes pyproject.toml). R4 builds the Dockerfile (consumes pyproject.toml + adds Node for R1). R1 wires the MCP subprocess (needs Node + the final LLM layer). R8 + R9 are independent and can run any time.
+
 | # | Item | Owner | Size |
 | --- | ---- | ----- | ---- |
-| R1 | **Wire MongoDB MCP Server.** Subprocess (`npx mongodb-mcp-server@latest --read-only --connectionString $MONGODB_URI`) via `langchain-mcp-adapters`. Surface `aggregate` + `collection-schema` tools into `create_react_agent(tools=[...])`. Dockerfile needs Node 20.19+ alongside Python. README names it. | @mahyar | M |
-| R2 | **Migrate to Vertex AI.** Swap `ChatGoogleGenerativeAI` → `ChatVertexAI(model="gemini-2.5-flash", location="us-central1")`. GCP project + service account + `roles/aiplatform.user`. Env: `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`. | @mahyar | S |
-| R4 | **Live hosted URL.** Vercel (frontend) + Railway (backend+agent, custom Dockerfile w/ Node + Python). Up through mid-July 2026. | @mahyar | M |
-| R8 | **Devpost draft** — walk form, save draft, send team invites. | @mahyar | XS |
-| R9 | **Demo video: target 2:00-2:30, not 90s.** Cap is 3 min. Extra time = MCP-firing-on-camera + vector recall + intervention loop + memory beat. | @kasra | XS |
+| R2 | **Migrate to Vertex AI** (do FIRST — locks the Python env for R1 + R4). Swap `ChatGoogleGenerativeAI` → `ChatVertexAI(model="gemini-2.5-flash", location="us-central1")`. GCP project + service account + `roles/aiplatform.user`. Env: `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`. | @mahyar | S |
+| R4 | **Live hosted URL** (do AFTER R2 — Dockerfile installs the final Python env + pre-stages Node 20.19+ for R1). Vercel frontend + Railway backend+agent with custom Dockerfile. Up through mid-July 2026. | @mahyar | M |
+| R1 | **Wire MongoDB MCP Server** (do AFTER R4 — needs the Dockerfile's Node runtime). Subprocess `npx mongodb-mcp-server@latest --read-only --connectionString $MONGODB_URI` via `langchain-mcp-adapters`. Surface `aggregate` + `collection-schema` tools into `create_react_agent(tools=[...])`. README names it. | @mahyar | M |
+| R8 | **Devpost draft** — walk form, save draft, send team invites. Independent of R1/R2/R4. | @mahyar | XS |
+| R9 | **Demo video: target 2:00-2:30**, not 90s. Cap is 3 min. Extra time = MCP-firing-on-camera + vector recall + intervention loop + memory beat. Independent. | @kasra | XS |
+
+**Dependency chain:** R2 changes `agent/pyproject.toml`. R4's Dockerfile installs that pyproject. R1's MCP integration needs both the final Python env (from R2) AND the Node runtime added in R4. R8 + R9 have no dependencies. Doing R1 before R2 means building MCP integration against the wrong LLM layer; doing R4 before R2 means a rebuild of the Docker image. **Execute as R2 → R4 → R1.**
 
 ---
 
