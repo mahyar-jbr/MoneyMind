@@ -96,10 +96,16 @@ _DESCRIPTIONS = {
         "cosine similarity; min_score filters low-quality matches."
     ),
     "write_memory": (
-        "Save a new memory the agent has discovered: a behavioral pattern, "
-        "stated preference, observed reaction, or stated fact. Use only when "
-        "confidence > 0.5 AND there are at least 2 evidence points. Summary "
-        "is what gets vector-searched — make it a single concrete sentence."
+        "Save a memory so future conversations can build on this one. Use FOUR "
+        "types: 'reaction' for a single observed event (e.g. one busy week → DoorDash "
+        "spike), 'pattern' for a recurring behavior across 2+ events, 'preference' "
+        "for a stated like/dislike, 'fact' for a stable truth. ALWAYS call "
+        "recall_memory FIRST to check whether this observation is already known: "
+        "if a 'reaction' memory matches, write a 'pattern' that supersedes it "
+        "(higher confidence, evidence list includes both dates). Confidence: ~0.4 "
+        "for first observation, 0.7+ when a pattern has 2+ events. Summary is "
+        "vector-searched — write ONE concrete sentence describing the behavior in "
+        "the user's own framing if possible."
     ),
     "update_user_context": (
         "Save something the user just told the agent about themselves: a "
