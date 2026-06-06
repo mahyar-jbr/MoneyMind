@@ -48,10 +48,35 @@ export async function POST(req: NextRequest) {
     return new Response("Agent unavailable", { status: 502 });
   }
 
-  return new Response(upstream.body, {
+  // Vercel's Node serverless runtime can buffer `new Response(upstream.body)`
+  // — observed in prod 2026-06-06: backend logs POST /chat 200 OK in ~3s,
+  // but the browser sees the request stay pending forever because Vercel
+  // never flushes. Workaround: manually pipe through a new ReadableStream
+  // so each chunk we receive from the backend is flushed to the wire.
+  const reader = upstream.body.getReader();
+  const stream = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+    cancel() {
+      reader.cancel().catch(() => {});
+    },
+  });
+
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
     },
   });
 }
