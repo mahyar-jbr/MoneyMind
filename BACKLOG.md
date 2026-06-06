@@ -246,45 +246,16 @@
 
 ---
 
-### V5 — Switch model to Gemini 3 (eligibility safety)
-
-**Current state (verified 2026-06-06):**
-- Code currently uses [`MODEL_NAME = "gemini-2.5-flash"`](agent/graphs/main.py#L58) on Vertex AI via `ChatVertexAI`.
-- The Devpost rule text says: *"Build a functional agent—powered by Gemini and Google Cloud Agent Builder"*. Multiple secondary summaries of the rules name **Gemini 3** specifically as the required model.
-- Likely the rule means "Gemini family" (2.5 is current GA, 3 is newest), but the wording is ambiguous enough that a strict judge could flag it.
-
-**Scope (minimum):**
-- Change one line: [`agent/graphs/main.py:58`](agent/graphs/main.py#L58) `gemini-2.5-flash` → `gemini-3-flash` (confirm the exact Vertex AI model ID at the time of the swap — it may be `gemini-3-flash-001` or similar).
-- Re-run the live 3-message birthday-party + memory smoke test on prod to confirm reply quality is at least as good.
-- If latency regresses past ~10s warm, revert and frame Devpost prose around "Gemini family on Vertex AI" as the fallback story.
-
-**Files to touch:** `agent/graphs/main.py:58` (one line). Optionally `agent/prompts/system.py` tuning if Gemini 3's tool-following behavior differs noticeably from 2.5 Flash's.
-
-**Effort:** 15-30 min including the smoke test.
-**Owner:** @mahyar
-**Demo value:** ELIGIBILITY INSURANCE — removes any reading of the rule that disqualifies us. Demo quality unaffected either way.
-**Risk:** LOW — easy revert if Gemini 3 introduces latency or tool-call regressions. The streaming + lifespan + async loop fixes from today are model-agnostic.
-**AC:**
-- [ ] `MODEL_NAME` swapped to the current Gemini 3 Vertex AI model ID.
-- [ ] Live 3-message flow ("I'm DoorDashing... busy week" → accept → "what do you remember") on prod still produces a memory write + recall.
-- [ ] Atlas `memories` count for the Clerk user goes up after the test.
-- [ ] No regression in warm chat latency past ~10s.
-
-**Recommendation:** **ship-must** — do this morning before any judging happens. Cheap insurance.
-
----
-
 ### Vision-backlog overall recommendation
 
 With ~5 days to submission and today already burned on a marathon bug-fix:
 
 | Priority | Item | Why |
 |---|---|---|
-| 1 | **V5 Gemini 3 swap** | 15 min, eligibility insurance, do first |
-| 2 | **V2 dashboard polish** | @aidin frontend + @mahyar backend; biggest visual delta |
-| 3 | **V1 goals (write + list + dashboard widget)** | @mahyar full stack; closes slide-7's dead beat |
-| 4 | V3 memory delete | @mahyar if time after V1+V2 |
-| 5 | V4 Part A CSV upload | Team discussion after V1+V2 land |
+| 1 | **V2 dashboard polish** | @aidin frontend + @mahyar backend; biggest visual delta |
+| 2 | **V1 goals (write + list + dashboard widget)** | @mahyar full stack; closes slide-7's dead beat |
+| 3 | V3 memory delete | @mahyar if time after V1+V2 |
+| 4 | V4 Part A CSV upload | Team discussion after V1+V2 land |
 
 **Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items.
 
