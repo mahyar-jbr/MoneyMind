@@ -4,9 +4,10 @@ import { NextRequest } from "next/server";
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 // force-dynamic to prevent Vercel from caching/buffering the stream.
-// maxDuration covers worst-case cold ReAct loops on Vertex.
+// maxDuration = 300 is the Hobby-plan ceiling; covers cold ReAct loops
+// well within the 30-60s reality.
 export const dynamic = "force-dynamic";
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const { userId, getToken } = await auth();
