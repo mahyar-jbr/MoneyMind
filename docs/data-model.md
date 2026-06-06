@@ -95,7 +95,7 @@ Patterns the agent discovers. **This is the magic collection.**
   ],
   intervention: { sunday_reminder: true },
   confidence: 0.78,                     // 0–1, agent's self-reported certainty
-  embedding: [/* 1024 dims, auto-embedded by Voyage */],
+  embedding: [/* 1024 dims; written explicitly on insert via Voyage (voyage-3), not auto-embed */],
   created_at: ISODate(...),
   last_used: ISODate(...),
   use_count: 3

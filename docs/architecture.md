@@ -15,12 +15,12 @@ Components: shadcn/ui + Tailwind. Animation: Framer Motion.
 
 ## Layer 2 — Reasoning (`/agent`)
 
-LangGraph orchestration on Gemini 3, deployed via Google Cloud Agent Builder.
+LangGraph ReAct loop on **Gemini 2.5 Flash via Vertex AI** (`langchain-google-vertexai` / `ChatVertexAI`).
 
-- **Graph** — a small loop: `plan → call_tools → reflect → respond`. Reflection step decides whether to write a memory.
-- **Tools (10)** — see [BACKLOG.md](../BACKLOG.md#sprint-2--the-agent-may-27--jun-2) for the full list. Each tool is a Python function with a JSON schema; LangGraph routes calls.
-- **MCP client** — connects to the MongoDB MCP server for query tuning and schema introspection. The agent can call `explain()` on its own queries and self-optimize.
-- **Cron** — once a week (8am Sunday user-local), a job kicks off the agent for each active user. Output lands in the user's in-app inbox.
+- **Graph** — `create_react_agent` over the native tools + MCP tools; `user_id` is carried in graph state via `InjectedState` so the LLM never sees or forges it. The agent decides for itself when to recall/write memory.
+- **Tools (11)** — see [BACKLOG.md](../BACKLOG.md#sprint-2--the-agent-may-27--jun-2) for the full list. Each is a Python function with a Pydantic schema; LangGraph routes calls.
+- **MCP client** — lazy-spawns the MongoDB MCP server as a stdio subprocess (`npx -y mongodb-mcp-server@latest --readOnly`) on the first chat turn and exposes its read tools as `mongo_*` for schema introspection and query tuning. Spawn failure degrades gracefully to the native tools.
+- **Weekly summary + reminders** — exposed as `POST /agent/run-weekly-summary` and `POST /agent/run-reminders`; output lands in the user's in-app inbox. For the hackathon these are triggered externally (manual curl per take); an automated scheduler is deferred post-freeze.
 
 ## Layer 3 — Data + Memory (`/backend` + Atlas)
 
@@ -29,11 +29,11 @@ A single MongoDB Atlas instance doing four jobs.
 | Job                | Collection(s)                                  | Notes                                                  |
 | ------------------ | ---------------------------------------------- | ------------------------------------------------------ |
 | Operational store  | `transactions`, `goals`, `interventions`, `outcomes`, `user_context` | Source of truth for app state                          |
-| Vector store       | `memories.embedding` (auto-embed via Voyage)   | HNSW index, 1024 dim, semantic recall                  |
+| Vector store       | `memories.embedding` (Voyage, written on insert) | HNSW index, 1024 dim, semantic recall; not auto-embed |
 | Memory store       | `langgraph_store` (managed by LangGraph)       | GA, persistent, namespaced per user                    |
-| Performance advisory | (via MCP server)                             | Agent uses 40+ MCP tools to inspect + tune queries     |
+| Performance advisory | (via MCP server)                             | Agent uses the read-only MongoDB MCP server's tools to inspect + tune queries |
 
-FastAPI sits in front: handles auth verification (Clerk JWT), CSV ingestion, aggregations, and proxies the agent's streaming output. It also runs the weekly cron.
+FastAPI sits in front: handles auth verification (Clerk JWT), CSV ingestion, aggregations, and proxies the agent's streaming output. It also exposes the weekly-summary + reminder endpoints (`POST /agent/run-weekly-summary`, `POST /agent/run-reminders`) that the cron logic lives behind — those are currently triggered by authenticated manual POST (an automated scheduler is deferred post-freeze).
 
 ## Data flow (the slide-10 picture in words)
 
@@ -83,7 +83,7 @@ These apply to every tool under `agent/tools/`. The reviewer Claude treats viola
 Decided 2026-06-02 (see `docs/decisions.md`). The wire format for any week reference is a plain ISO date string `YYYY-MM-DD` denoting the Monday that starts the week. No time component, no zone suffix. Five implementations of "week" coexist in the codebase today:
 
 - `agent/tools/summarize_week.py` — Python `weekday()` arithmetic on a `date`, Monday start. Canonical for the agent + cron output.
-- `backend/app/api/cron` — same Python `weekday()`.
+- `backend/app/cron/` (`weekly_summary.py`, `reminders.py`) — same Python `weekday()`.
 - `backend/app/aggregations/weekly.py` — Mongo `$dateTrunc { unit: "week", startOfWeek: "monday" }` on the stored UTC-midnight `date` field.
 - `agent/tools/get_spend_anomaly.py` — anchored 7-day buckets. Deliberately different (anomaly tool, not calendar). NOT a week formatter.
 - `frontend/lib/dashboard.ts` — `formatWeek` / `formatDate`.

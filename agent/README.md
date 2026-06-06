@@ -1,18 +1,21 @@
 # agent — LangGraph + Gemini
 
 **Owner:** @mahyar
-**Stack:** Python 3.12 · uv · LangGraph · Gemini 3 (via google-genai) · Motor · Voyage AI
+**Stack:** Python 3.12 · uv · LangGraph · Gemini 2.5 Flash on Vertex AI (langchain-google-vertexai) · Motor · Voyage AI
 
 ## First-time setup
 
 Run **inside this folder**:
 
+The canonical dependency set lives in `agent/pyproject.toml` / `uv.lock` — to build
+the env, just `uv sync` inside `agent/`. The original scaffold (kept for history):
+
 ```bash
 # 1. Init uv project
 uv init --app .
 
-# 2. Add the libs
-uv add langgraph langchain-google-genai google-genai motor pymongo voyageai \
+# 2. Add the libs (LLM layer is Vertex AI, NOT the AI-Studio google-genai SDK)
+uv add langgraph langchain-google-vertexai langchain-mcp-adapters motor pymongo voyageai \
        python-dotenv pydantic pydantic-settings httpx
 uv add --dev pytest pytest-asyncio ruff
 
@@ -52,9 +55,9 @@ load_dotenv("../.env")
 Variables this service uses:
 - `MONGODB_URI`
 - `MONGODB_DB`
-- `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GOOGLE_APPLICATION_CREDENTIALS` (Vertex AI auth, R2)
+- `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GOOGLE_APPLICATION_CREDENTIALS` (Vertex AI ADC, R2). In the container, `deploy/entrypoint.sh` derives `GOOGLE_APPLICATION_CREDENTIALS` from `GOOGLE_APPLICATION_CREDENTIALS_JSON_B64`.
 - `VOYAGE_API_KEY`
-- `MCP_ENABLED`, `MCP_SERVER_URL` (Sprint 2)
+- `MONGODB_MCP_DISABLE=1` (optional kill switch) / `MONGODB_MCP_TRANSPORT` (default `stdio`) — the MCP server is a stdio subprocess; there is no `MCP_ENABLED`/`MCP_SERVER_URL`.
 
 ## What ships in Sprint 1
 
