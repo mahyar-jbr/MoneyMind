@@ -33,7 +33,7 @@ async def context_coll():
 
 async def test_simple_reply_no_tool_call(context_coll):
     llm, _received = make_fake_chat_model([AIMessage(content="Hello! How can I help?")])
-    graph = build_graph(llm=llm, context_collection=context_coll)
+    graph = await build_graph(llm=llm, context_collection=context_coll)
     result = await graph.ainvoke({
         "user_id": "u_482",
         "messages": [{"role": "user", "content": "hi"}],
@@ -74,7 +74,7 @@ async def test_anomaly_detection_flow(context_coll):
         )
 
     with patch("agent.graphs.main.get_spend_anomaly", fake_anomaly):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         result = await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "how's my food spend?"}],
@@ -147,7 +147,7 @@ async def test_memory_write_flow(context_coll):
         patch("agent.graphs.main.write_memory", fake_write_memory),
         patch("agent.graphs.main.update_user_context", fake_update_ctx),
     ):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "I'm bulking this month."}],
@@ -196,7 +196,7 @@ async def test_recall_before_anomaly(context_coll):
         patch("agent.graphs.main.recall_memory", fake_recall),
         patch("agent.graphs.main.get_spend_anomaly", fake_anomaly),
     ):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "my food spend feels off"}],
@@ -236,7 +236,7 @@ async def test_user_id_injected_not_from_llm(context_coll):
         )
 
     with patch("agent.graphs.main.get_spend_anomaly", fake_anomaly):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482_legit",
             "messages": [{"role": "user", "content": "ok"}],
@@ -264,7 +264,7 @@ async def test_active_context_in_system_message(context_coll):
     block = format_active_context(docs)
 
     llm, received = make_fake_chat_model([AIMessage(content="Noted.")])
-    graph = build_graph(llm=llm)
+    graph = await build_graph(llm=llm)
     await graph.ainvoke({
         "user_id": "u_482",
         "active_context_block": block,
@@ -297,7 +297,7 @@ async def test_streaming_yields_only_final_reply(context_coll):
         )
 
     with patch("agent.graphs.main.recall_memory", fake_recall):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         state = {"user_id": "u_482", "messages": [{"role": "user", "content": "hi"}]}
         # Apply the SAME filter stream_chat uses: agent-node text only.
         chunks = []
@@ -365,7 +365,7 @@ async def test_check_goal_pace_flow(context_coll):
         )
 
     with patch("agent.graphs.main.check_goal_pace", fake_pace):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "how's my emergency fund?"}],
@@ -408,7 +408,7 @@ async def test_propose_intervention_flow(context_coll):
         )
 
     with patch("agent.graphs.main.propose_intervention", fake_propose):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "anything you'd suggest?"}],
@@ -460,7 +460,7 @@ async def test_log_outcome_flow(context_coll):
         )
 
     with patch("agent.graphs.main.log_outcome", fake_log):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "the cap worked, food's way down"}],
@@ -507,7 +507,7 @@ async def test_schedule_reminder_flow(context_coll):
         )
 
     with patch("agent.graphs.main.schedule_reminder", fake_schedule):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "remind me in 7 days to cancel the gym"}],
@@ -555,7 +555,7 @@ async def test_summarize_week_flow(context_coll):
         )
 
     with patch("agent.graphs.main.summarize_week", fake_summarize):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "how am I doing this week?"}],
@@ -604,7 +604,7 @@ async def test_respond_to_intervention_flow(context_coll):
         )
 
     with patch("agent.graphs.main.respond_to_intervention", fake_respond):
-        graph = build_graph(llm=llm, context_collection=context_coll)
+        graph = await build_graph(llm=llm, context_collection=context_coll)
         await graph.ainvoke({
             "user_id": "u_482",
             "messages": [{"role": "user", "content": "yes please"}],
