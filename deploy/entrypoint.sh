@@ -2,10 +2,11 @@
 # MoneyMind container entrypoint.
 #
 # Two responsibilities:
-# 1. If GOOGLE_APPLICATION_CREDENTIALS_JSON is set (Railway env var with the
-#    full service-account JSON), write it to a tmp file and point
-#    GOOGLE_APPLICATION_CREDENTIALS at it. This is the production
-#    equivalent of `.gcloud/service-account.json` for local dev.
+# 1. If GOOGLE_APPLICATION_CREDENTIALS_JSON_B64 is set (Railway env var with
+#    base64-encoded service-account JSON), decode it to a tmp file and point
+#    GOOGLE_APPLICATION_CREDENTIALS at it. Base64 dodges shell-quoting +
+#    newline-in-multiline-paste issues that broke raw JSON in env vars.
+#    Falls back to GOOGLE_APPLICATION_CREDENTIALS_JSON (raw JSON) for compat.
 # 2. Honor Railway's $PORT (it maps an external port to one inside the
 #    container). Default to 8000 if not set (local docker run).
 #
@@ -13,10 +14,16 @@
 
 set -e
 
-if [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
-    echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/google-sa.json
+if [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON_B64" ]; then
+    echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON_B64" | base64 -d > /tmp/google-sa.json
     export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-sa.json
-    echo "[entrypoint] wrote GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-sa.json"
+    echo "[entrypoint] wrote GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-sa.json (base64-decoded)"
+elif [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
+    # Raw JSON fallback. Railway sometimes mangles multi-line values with
+    # backslash-n sequences turned into literal newlines; prefer the B64 var.
+    printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/google-sa.json
+    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-sa.json
+    echo "[entrypoint] wrote GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-sa.json (raw, may be malformed)"
 fi
 
 if [ -n "$PORT" ]; then
