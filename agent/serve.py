@@ -10,7 +10,10 @@ project, so `agent` is not on sys.path by default — adding the repo root
 makes `agent.serve` importable.
 """
 
+import asyncio
 import logging
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,16 +22,55 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent.graphs.main import stream_chat
-
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
 
+
+# The agent graph pulls langchain_google_vertexai + langgraph + 11 tool
+# modules — cold import is 60-240s on a fresh interpreter. We keep this
+# out of the module-load path (so /health and uvicorn's "ready" announce
+# are instant) and warm it in a background thread during the lifespan
+# startup hook. `/chat` requests block on `_warmed.wait()` until the
+# import finishes — on a warm container that's nanoseconds.
+#
+# Tests monkeypatch `serve.stream_chat` directly to bypass the warmup.
+
+stream_chat = None  # type: ignore[assignment]
+_warmed = threading.Event()
+
+
+def _load_stream_chat() -> None:
+    """Import agent.graphs.main.stream_chat and cache it on this module."""
+    global stream_chat
+    if stream_chat is not None:
+        return
+    from agent.graphs.main import stream_chat as _stream_chat
+    stream_chat = _stream_chat  # type: ignore[assignment]
+
+
+def _warm_in_background() -> None:
+    """Run on a thread during lifespan startup; populates stream_chat."""
+    try:
+        _load_stream_chat()
+    except Exception:  # noqa: BLE001 — log and continue; /chat will retry
+        logging.getLogger(__name__).exception("graph warm-up failed")
+    finally:
+        _warmed.set()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Kick the heavy graph import onto a thread at startup so uvicorn
+    can announce 'ready' immediately. /chat blocks on _warmed."""
+    threading.Thread(target=_warm_in_background, name="graph-warm", daemon=True).start()
+    yield
+
+
 logger = logging.getLogger(__name__)
 AGENT_HOST = "127.0.0.1"
 
-app = FastAPI(title="MoneyMind Agent", version="0.1.0")
+app = FastAPI(title="MoneyMind Agent", version="0.1.0", lifespan=_lifespan)
 
 
 @app.exception_handler(RequestValidationError)
@@ -59,7 +101,7 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(
+async def chat(
     payload: ChatRequest,
     request: Request,
     user_id: str = Header(..., alias="X-MoneyMind-User-Id", min_length=1),
@@ -70,6 +112,18 @@ def chat(
     § "Chat wire format"). The connection closing is the end of stream.
     """
     _require_loopback_client(request)
+    if stream_chat is None:
+        # Warmup not finished yet. Wait off the event loop so we don't
+        # starve other requests. 240s upper bound mirrors Vertex's cold
+        # import worst case observed locally.
+        await asyncio.get_event_loop().run_in_executor(
+            None, _warmed.wait, 240
+        )
+        if stream_chat is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="agent warming up; retry in a few seconds",
+            )
 
     def tokens():
         try:

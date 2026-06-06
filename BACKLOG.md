@@ -70,7 +70,7 @@
 
 | #   | Item                                                                  | Owner            | Size |
 | --- | --------------------------------------------------------------------- | ---------------- | ---- |
-| 25  | Agent voice tuning (in progress on branch `25`)                       | @mahyar          | M    |
+| 25  | ✅ **done 2026-06-06** — Agent voice tuning shipped (7d5efad + bdbeb15). System prompt rewritten against four observed gaps: (a) empty-week fallback retries `summarize_week` with `week_offset=-1`; (b) Active-context block MUST be acknowledged in the reply, not silently re-interpreted; (c) STATE→COMPARE→ASK number-framing contract, no bare totals; (d) full slide-8 propose→respond chain with explicit ordering (write_memory fires on response, not proposal). Voice rules: whole dollars only, "want me to" not "would you like me to", 1-3 sentences, no narration of tool calls. Memory loop (a4b3695) preserved; mongo_* meta-routing (R1) preserved. Live judgment via prod URL. | @mahyar          | —    |
 | 26  | Frontend dashboard + chat polish                                      | @aidin           | M    |
 | 27  | **Demo video — script, record, edit (2:00-2:30, max 3min)**           | @kasra           | L    |
 | 28  | Devpost writeup (full prose, replaces the placeholder draft)          | @mahyar          | M    |

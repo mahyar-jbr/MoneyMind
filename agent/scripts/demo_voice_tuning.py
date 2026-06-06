@@ -1,23 +1,29 @@
 """#25 voice-tuning verifier — runs the 4 scripted turns from the ticket
-against the LIVE production agent service (Railway) and prints transcripts +
-a verdict per turn.
+against a LOCAL agent boot and prints transcripts + a verdict per turn.
 
-Two modes:
+WHY LOCAL, NOT PROD: the agent service enforces two gates that public
+HTTP can't satisfy — `_require_loopback_client` (only 127.0.0.1, ::1,
+localhost, testclient accepted) and the `X-MoneyMind-User-Id` header
+contract from #4a. The prod path is:
 
-  1. AGAINST PROD (default) — calls the deployed agent's /chat directly with
-     the loopback-style X-MoneyMind-User-Id header (#4a contract). This is
-     how the backend talks to the agent on Railway, so it's the closest
-     thing to "what the live chat does" without going through Vercel/Clerk.
+    browser → Vercel → backend (Clerk Bearer) → agent loopback (X-MoneyMind-User-Id)
 
-  2. AGAINST LOCAL — if AGENT_URL points at a local boot, hits that instead.
+The verifier short-circuits everything except the agent's prompt+tools
+behavior by booting the agent locally and hitting its loopback. Same
+LLM (Vertex Gemini), same tool list, same prompt → so the AC verdicts
+land identical to prod.
 
-Run from agent/:
+Run from agent/, in two terminals:
 
+  Terminal 1 (boot agent):
+    PYTHONPATH=.. uv run uvicorn agent.serve:app --host 127.0.0.1 --port 8001
+
+  Terminal 2 (run verifier):
     PYTHONPATH=.. uv run python -m agent.scripts.demo_voice_tuning [user_id]
 
-Optional positional arg is the user_id to test as. Defaults to u_482 (the
-seeded synthetic user from sprint 1). Gemini quota cost: 4-5 calls on the
-happy path, capped by EARLY_EXIT_ON_RATE_LIMIT below.
+Optional positional arg is the user_id to test as. Defaults to u_482
+(the seeded synthetic user from sprint 1). Gemini quota cost: 4-5 calls
+on the happy path, capped by EARLY_EXIT_ON_RATE_LIMIT below.
 """
 
 import asyncio
@@ -28,10 +34,10 @@ from datetime import UTC, datetime
 import httpx
 
 
-PROD_AGENT_URL = "https://moneymind-production-2a7e.up.railway.app"
+LOCAL_AGENT_URL = "http://127.0.0.1:8001"
 DEFAULT_USER_ID = "u_482"
 EARLY_EXIT_ON_RATE_LIMIT = True
-TIMEOUT_S = 90.0
+TIMEOUT_S = 300.0  # first turn pays the graph cold-import (~3-4min); later turns are 10-30s
 
 
 TURNS: list[tuple[str, str, list[str]]] = [
@@ -132,7 +138,7 @@ def _verdict(turn_idx: int, label: str, reply: str, pass_needles: list[str]) -> 
 
 
 async def main(user_id: str) -> int:
-    base_url = os.getenv("AGENT_URL", PROD_AGENT_URL).rstrip("/")
+    base_url = os.getenv("AGENT_URL", LOCAL_AGENT_URL).rstrip("/")
     print(f"#25 voice-tuning verifier  ·  agent: {base_url}  ·  user: {user_id}")
     print(f"started: {datetime.now(UTC).isoformat(timespec='seconds')}")
 
