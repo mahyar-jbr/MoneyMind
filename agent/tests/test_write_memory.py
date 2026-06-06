@@ -187,11 +187,44 @@ def test_validation_empty_user_id():
         )
 
 
-def test_validation_empty_tag():
-    with pytest.raises(ValidationError):
-        WriteMemoryInput(
-            user_id="u", type="fact", tag="", summary="x" * 20, confidence=0.5
+def test_tag_optional_for_llm():
+    """tag is optional in the schema so Gemini Flash doesn't refuse to
+    call write_memory; the tool derives a tag from summary when missing.
+    Was previously required (min_length=1) and that caused 0 memory
+    writes in prod — Flash silently skipped the tool entirely."""
+    params = WriteMemoryInput(
+        user_id="u", type="fact", summary="x" * 20, confidence=0.5
+    )
+    assert params.tag is None  # the LLM didn't supply one; tool will derive
+
+
+def test_tag_derived_from_summary_when_omitted():
+    """When the LLM omits tag, the tool synthesizes one from summary."""
+    import asyncio
+
+    from agent.tests._fakes import make_mongomock_collection
+
+    async def _embedder(_text: str) -> list[float]:
+        return [0.0] * 1024
+
+    async def _run() -> None:
+        coll = make_mongomock_collection()
+        result = await write_memory(
+            WriteMemoryInput(
+                user_id="u_482",
+                type="reaction",
+                summary="User is bulking this month — expect food spend up",
+                confidence=0.4,
+            ),
+            collection=coll,
+            embedder=_embedder,
         )
+        # Doc was actually written with a non-empty tag.
+        doc = await coll.find_one({"_id": ObjectId(result.memory_id)})
+        assert doc["tag"]
+        assert doc["tag"] == "user_is_bulking"
+
+    asyncio.run(_run())
 
 
 def test_validation_tag_too_long():

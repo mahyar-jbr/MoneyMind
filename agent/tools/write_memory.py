@@ -29,7 +29,11 @@ class EvidenceItem(BaseModel):
 class WriteMemoryInput(BaseModel):
     user_id: str = Field(min_length=1)
     type: MemoryType
-    tag: str = Field(min_length=1, max_length=80)
+    # tag is optional from the LLM's perspective — Gemini Flash was
+    # silently refusing to call write_memory because it could not
+    # synthesize a value for an undocumented required string field.
+    # When omitted, we derive a tag from the first few words of summary.
+    tag: str | None = Field(default=None, max_length=80)
     summary: str = Field(min_length=10, max_length=500)
     evidence: list[EvidenceItem] = Field(default_factory=list, max_length=20)
     confidence: float = Field(ge=0.0, le=1.0)
@@ -74,11 +78,18 @@ async def write_memory(
 
     embedding = await embedder(params.summary)
 
+    # Derive a tag if the LLM didn't supply one. First 3 lowercased,
+    # underscored words of summary, capped at 80 chars (db constraint).
+    tag = params.tag
+    if not tag:
+        words = params.summary.lower().split()[:3]
+        tag = "_".join(w.strip(".,!?;:") for w in words)[:80] or "memory"
+
     created_at = datetime.now(UTC)
     doc = {
         "user_id": params.user_id,
         "type": params.type,
-        "tag": params.tag,
+        "tag": tag,
         "summary": params.summary,
         "evidence": [
             {"date": _at_midnight(e.date), "note": e.note} for e in params.evidence
@@ -96,7 +107,7 @@ async def write_memory(
         memory_id=str(result.inserted_id),
         user_id=params.user_id,
         type=params.type,
-        tag=params.tag,
+        tag=tag,
         created_at=created_at,
         embedded=True,
     )
