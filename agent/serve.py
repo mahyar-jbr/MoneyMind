@@ -125,14 +125,26 @@ async def chat(
                 detail="agent warming up; retry in a few seconds",
             )
 
-    def tokens():
+    # stream_chat is a sync generator (Iterator[str]). Drive it from a
+    # thread via run_in_executor so the async event loop stays free and
+    # the chunks flush to the wire as they're produced. Without this, the
+    # sync generator inside an async handler blocks the loop and the UI
+    # sees the typing indicator hang.
+    loop = asyncio.get_event_loop()
+
+    async def tokens():
         try:
-            for chunk in stream_chat(user_id, payload.message):
+            it = stream_chat(user_id, payload.message)
+            sentinel = object()
+            while True:
+                chunk = await loop.run_in_executor(None, next, it, sentinel)
+                if chunk is sentinel:
+                    return
                 yield chunk
         except Exception:
             logger.exception("agent run failed")
-            # Stream is already open; closing the connection signals the error
-            # to the client per the wire-format contract (client re-sends).
+            # Stream is already open; closing the connection signals the
+            # error to the client per the wire-format contract.
             return
 
     return StreamingResponse(
