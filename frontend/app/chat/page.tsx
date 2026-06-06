@@ -87,17 +87,29 @@ export default function ChatPage() {
           ),
         );
       }
-      // after each reply, surface any interventions the agent proposed
+      // after each reply, surface any interventions the agent proposed.
+      // Dedup against what we've already rendered — the backend keeps a
+      // pending intervention in the list until the user accepts/declines,
+      // so without this it would re-append on every turn.
       const pending = await fetchPendingInterventions();
       if (pending.length) {
-        setMessages((prev) => [
-          ...prev,
-          ...pending.map((it) => ({
-            id: it.intervention_id,
-            kind: "intervention" as const,
-            intervention: it,
-          })),
-        ]);
+        setMessages((prev) => {
+          const seen = new Set(
+            prev
+              .filter((m): m is InterventionItem => "kind" in m)
+              .map((m) => m.intervention.intervention_id),
+          );
+          const fresh = pending.filter((it) => !seen.has(it.intervention_id));
+          if (!fresh.length) return prev;
+          return [
+            ...prev,
+            ...fresh.map((it) => ({
+              id: it.intervention_id,
+              kind: "intervention" as const,
+              intervention: it,
+            })),
+          ];
+        });
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;

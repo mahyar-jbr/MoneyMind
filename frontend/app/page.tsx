@@ -13,23 +13,37 @@ const rise = (delay: number) => ({
 });
 
 export default function Home() {
+  // Spline iframe loads from a third-party host. If it never fires onLoad
+  // within 5s (404, rate limit, network), we hide it and the CSS ambient
+  // glow underneath becomes the sole hero visual — the page never breaks.
+  const [splineLoaded, setSplineLoaded] = useState(false);
+  const [splineGaveUp, setSplineGaveUp] = useState(false);
+  useEffect(() => {
+    if (splineLoaded) return;
+    const timer = setTimeout(() => setSplineGaveUp(true), 5000);
+    return () => clearTimeout(timer);
+  }, [splineLoaded]);
+  const showSpline = !splineGaveUp;
+
   return (
     <div className="relative isolate flex min-h-svh flex-col overflow-hidden">
-      {/* ambient glow */}
+      {/* ambient glow — base visual; renders alone if Spline is unavailable */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-48 left-1/2 h-[620px] w-[1000px] -translate-x-1/2 rounded-full bg-[color:var(--color-accent)]/12 blur-[140px]" />
         <div className="absolute right-0 top-1/4 hidden h-[560px] w-[640px] translate-x-1/4 rounded-full bg-[color:var(--color-accent)]/[0.07] blur-[130px] lg:block" />
       </div>
 
-      {/* Spline 3D background (prototype, preview only, not committed) */}
-      {/* iframe scaled to 120% + centered so the corner "Built with Spline" badge is clipped by overflow-hidden */}
-      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <iframe
-          src="https://my.spline.design/bitcoincoins-wiXPOmu1Rpb4g8dvF2V9JtBz/"
-          title="3D background"
-          className="absolute left-1/2 top-1/2 h-[120%] w-[120%] -translate-x-1/2 -translate-y-1/2 border-0"
-        />
-      </div>
+      {/* Spline 3D background. Hidden after 5s if it never loaded. */}
+      {showSpline && (
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <iframe
+            src="https://my.spline.design/bitcoincoins-wiXPOmu1Rpb4g8dvF2V9JtBz/"
+            title="3D background"
+            className="absolute left-1/2 top-1/2 h-[120%] w-[120%] -translate-x-1/2 -translate-y-1/2 border-0"
+            onLoad={() => setSplineLoaded(true)}
+          />
+        </div>
+      )}
 
       <header className="border-b border-white/[0.06] bg-[color:var(--color-bg)]/40 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-6">

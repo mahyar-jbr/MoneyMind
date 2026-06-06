@@ -39,31 +39,57 @@ export function interventionCopy(it: Intervention): Copy {
   return COPY[it.type](it.params);
 }
 
-// the user's pending interventions. mock for now: serves one, then nothing.
-// swap the body for a GET when the backend exposes a pending list; the chat
-// page already polls this after each turn.
-let served = false;
-export async function fetchPendingInterventions(): Promise<Intervention[]> {
-  if (served) return [];
-  served = true;
-  return [
-    {
-      intervention_id: `iv_${Math.random().toString(36).slice(2, 8)}`,
-      type: "reminder",
-      params: { day: "Sunday", what: "meal prep" },
-      status: "pending",
-      user_response: null,
-    },
-  ];
+// Backend's serialized intervention doc. The repo-wide canonical shape lives in
+// docs/data-model.md § interventions; backend (`api/interventions.py`)
+// serializes Mongo's `_id` → `id`. We reshape to `intervention_id` here so
+// the rest of the frontend stays on one name.
+type BackendIntervention = {
+  id: string;
+  type: InterventionType;
+  params: Record<string, string | number>;
+  status: "pending" | "responded" | "ignored";
+  user_response: InterventionResponse | null;
+};
+
+function fromBackend(doc: BackendIntervention): Intervention {
+  return {
+    intervention_id: doc.id,
+    type: doc.type,
+    params: doc.params,
+    status: doc.status,
+    user_response: doc.user_response,
+  };
 }
 
-// records the user's choice. swap the body for a POST when the endpoint lands:
-// POST /interventions/{id}/respond  { response, modified_params }
+// GET /api/interventions/pending → backend GET /interventions/pending
+// Returns the user's currently-pending intervention docs. Chat page calls
+// this after every reply; it dedups before appending.
+export async function fetchPendingInterventions(): Promise<Intervention[]> {
+  const res = await fetch("/api/interventions/pending", { cache: "no-store" });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { interventions?: BackendIntervention[] };
+  return (body.interventions ?? []).map(fromBackend);
+}
+
+// POST /api/interventions/{id}/respond → backend POST /interventions/{id}/respond
+// Backend's InterventionResponseRequest expects snake_case:
+//   { user_response, modified_params }
+// — NOT the camelCase the React props use. We remap here.
 export async function respondToIntervention(
   interventionId: string,
   response: InterventionResponse,
   modifiedParams?: Record<string, string | number>,
 ): Promise<void> {
-  void [interventionId, response, modifiedParams];
-  await new Promise((r) => setTimeout(r, 200));
+  const res = await fetch(`/api/interventions/${interventionId}/respond`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_response: response,
+      modified_params: modifiedParams,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`respond failed: ${res.status}`);
+  }
 }
