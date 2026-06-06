@@ -5,8 +5,9 @@ The official MongoDB MCP Server runs as a Node subprocess
 stdio. `langchain-mcp-adapters` wraps each MCP-provided tool as a LangChain
 `StructuredTool` that drops straight into `create_react_agent(tools=[...])`.
 
-Read-only is non-negotiable: the subprocess is started with `--read-only`
-which prevents every Atlas write operation at the server level (a judge
+Read-only is non-negotiable: the subprocess is started with `--readOnly`
+(camelCase — the kebab-case form fails at startup), which prevents every
+Atlas write operation at the server level (a judge
 typing 'drop transactions' cannot do it).
 
 Resilience contract: if the MCP subprocess fails to spawn (Node missing,
@@ -54,7 +55,7 @@ def _server_config() -> dict[str, Any]:
             "args": [
                 "-y",
                 "mongodb-mcp-server@latest",
-                "--read-only",
+                "--readOnly",
                 "--connectionString",
                 mongodb_uri,
             ],

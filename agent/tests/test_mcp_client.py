@@ -131,16 +131,18 @@ async def test_spawn_failure_returns_empty(_mongodb_uri, caplog):
     assert isinstance(mcp_client_module._init_error, OSError)
 
 
-# ─── R1 security: --read-only flag is in the server config ───────────────
+# ─── R1 security: --readOnly flag is in the server config ────────────────
 
 
 def test_server_config_includes_read_only_flag(_mongodb_uri):
     cfg = _server_config()
     args = cfg[SERVER_NAME]["args"]
-    assert "--read-only" in args, (
+    assert "--readOnly" in args, (
         "R1 security contract: MongoDB MCP subprocess must spawn with "
-        "--read-only. A judge typing 'drop the transactions collection' "
-        "must be structurally unable to do it."
+        "--readOnly (camelCase — the kebab-case form fails at startup, "
+        "caught in prod by the WARNING log on 2026-06-06). A judge typing "
+        "'drop the transactions collection' must be structurally unable "
+        "to do it."
     )
 
 
