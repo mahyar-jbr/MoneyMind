@@ -16,7 +16,7 @@ Public API (kept stable for serve.py + existing tests):
 
 import asyncio
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Annotated, Any, NotRequired
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -367,27 +367,36 @@ def run_chat(user_id: str, message: str) -> str:
     return asyncio.run(arun_chat(user_id, message))
 
 
-def stream_chat(user_id: str, message: str) -> Iterator[str]:
-    """Sync streaming entry point — yields only final-LLM tokens as plain text.
+async def astream_chat(user_id: str, message: str) -> AsyncIterator[str]:
+    """Async streaming entry point — yields only final-LLM tokens as plain text.
 
-    Must NOT be called from inside a running event loop. Coerces content
-    blocks (gemini-2.5-flash sometimes wraps in list[dict]) to plain text
-    so the wire format stays text/plain.
-
-    build_graph is async (since R1 — MCP subprocess discovery), so we run
-    both the build and the initial-state fetch on the same asyncio.run loop
-    before draining the sync `.stream(...)` from compiled.
+    This is the production path. Stays on the caller's event loop end-to-end,
+    so motor cursors (active-context fetch, memory recall, etc.) all live on
+    a single loop and don't trip RuntimeError: Future attached to a different
+    loop. The agent /chat handler awaits this directly.
     """
-
-    async def _prep() -> tuple[Any, dict]:
-        compiled = await build_graph()
-        initial = await _build_initial_state(user_id, message)
-        return compiled, initial
-
-    compiled, initial = asyncio.run(_prep())
-    for chunk, metadata in compiled.stream(initial, stream_mode="messages"):
+    compiled = await build_graph()
+    initial = await _build_initial_state(user_id, message)
+    async for chunk, metadata in compiled.astream(initial, stream_mode="messages"):
         if metadata.get("langgraph_node") != "agent":
             continue
         text = _content_to_text(getattr(chunk, "content", ""))
         if text:
             yield text
+
+
+def stream_chat(user_id: str, message: str) -> Iterator[str]:
+    """Sync streaming entry point — yields only final-LLM tokens as plain text.
+
+    Kept for tests and any non-async caller. Drives astream_chat under
+    asyncio.run. Must NOT be called from inside a running event loop.
+    Production /chat in serve.py uses astream_chat directly to avoid the
+    loop-straddling bug that hit motor cursors.
+    """
+    async def _drain() -> list[str]:
+        out: list[str] = []
+        async for text in astream_chat(user_id, message):
+            out.append(text)
+        return out
+
+    yield from asyncio.run(_drain())
