@@ -46,11 +46,11 @@ export default function ChatPage() {
     });
   }, [messages, streaming]);
 
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
+  // NOTE: previously we had an unmount cleanup that called
+  // abortRef.current?.abort(). Removed because it was canceling in-flight
+  // requests in prod when React's effect lifecycle fired the cleanup mid-
+  // stream — visible in DevTools as the chat request going to "(canceled)"
+  // around 1.8s. Users can refresh to abort; we don't need fancier UX.
 
   async function send(text: string) {
     const trimmed = text.trim();
