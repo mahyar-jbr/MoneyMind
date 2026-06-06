@@ -71,10 +71,10 @@
 
 | #   | Item                                                                  | Owner            | Size |
 | --- | --------------------------------------------------------------------- | ---------------- | ---- |
-| 25  | ✅ **done 2026-06-06** — Agent voice tuning shipped (7d5efad + bdbeb15). System prompt rewritten against four observed gaps: (a) empty-week fallback retries `summarize_week` with `week_offset=-1`; (b) Active-context block MUST be acknowledged in the reply, not silently re-interpreted; (c) STATE→COMPARE→ASK number-framing contract, no bare totals; (d) full slide-8 propose→respond chain with explicit ordering (write_memory fires on response, not proposal). Voice rules: whole dollars only, "want me to" not "would you like me to", 1-3 sentences, no narration of tool calls. Memory loop (a4b3695) preserved; mongo_* meta-routing (R1) preserved. Live judgment via prod URL. | @mahyar          | —    |
-| 26  | Frontend dashboard + chat polish                                      | @aidin           | M    |
+| 25  | ✅ **done 2026-06-06** — Agent voice tuning (7d5efad + bdbeb15). Live-judged on prod; birthday-party + DoorDash co-recall verified. | @mahyar          | —    |
+| 26  | ➡️ **superseded by V2** in the vision backlog (month selector + top-merchants + goal widget). Track there. | @aidin           | —    |
 | 27  | **Demo video — script, record, edit (2:00-2:30, max 3min)**           | @kasra           | L    |
-| 28  | Devpost writeup (full prose, replaces the placeholder draft)          | @mahyar          | M    |
+| 28  | Devpost writeup (full prose, replaces the placeholder draft). Must explicitly cite the SDK path + LangGraph + Vertex AI Gemini per the eligibility framing. | @mahyar          | M    |
 | 29  | Smoke test full flow on live deployed URL with fresh user             | all              | S    |
 | 30  | Tag `v1.0` and freeze main                                            | @mahyar          | S    |
 
@@ -86,6 +86,205 @@
 
 | #   | Status | Item                                                                | Owner    | Size | Why                                                  |
 | --- | ------ | ------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------- |
-| 22a-swap | 🚨 **demo-critical** | **Aidin swaps the two mock seams in `frontend/lib/interventions.ts`** for real `fetch()` calls to `/api/interventions/pending` and `/api/interventions/{id}/respond`. Add matching proxy routes under `frontend/app/api/interventions/` (Clerk-bearer-forward, same pattern as `/api/transactions`). Smoke-test against real agent writes via chat. | @aidin | XS | Slide-8 card is still mock theater until this lands. Blocks #27 recording. |
+| 22a-swap | ✅ **done 2026-06-06** | Real intervention wiring shipped (ad94ab3). New proxy routes, fromBackend adapter remaps `id → intervention_id`, snake_case respond body, chat-page dedup against rendered intervention_ids. Live-verified: real Atlas ObjectId `6a24996b47fb51e75e8b7f29` written + pending→responded flip on prod. | @mahyar | — | — |
 | 23a-seed | 🟡 **before recording** | **Trigger `/agent/run-weekly-summary` + `/agent/run-reminders` against the demo user** so the inbox has populated content on camera. POST both endpoints once before each take. | @mahyar | XS | 30 seconds of curl per take. |
+
+---
+
+## 🔭 Vision backlog — "real finance app" enhancements (post-MVP)
+
+> Added 2026-06-06 EOD after walking through what the agent **can't** do today vs. the pitch's promise. The product already works end-to-end with memory + active context + interventions, but these four items are the gap between "demo of an idea" and "ship it tomorrow". Each entry below has been fact-checked against the shipped code; current_state cites what's actually there.
+
+### V1 — Goals: create + read via chat or dashboard
+
+**Current state (verified 2026-06-06):**
+- ✅ `check_goal_pace` tool exists in [`agent/tools/check_goal_pace.py`](agent/tools/check_goal_pace.py) — reads a goal by `goal_id`, returns pace verdict (ahead/on_track/behind/past_due/...).
+- ✅ Goals collection schema documented in [`docs/data-model.md`](docs/data-model.md).
+- ❌ No `write_goal` / `list_goals` / `update_goal` agent tools exist.
+- ❌ No `/goals` backend route exists (`backend/app/api/` has no goals file).
+- ❌ No frontend goals UI (`grep -rln "goals" frontend/` returns only the home-page mention).
+- ❌ User's Atlas `goals` collection is empty for the Clerk user (`count_documents({user_id: ...})` returned 0).
+- 🔴 **`check_goal_pace` is unusable in practice** — the agent has no way to discover a `goal_id` to pass in. Today the goal beat is invisible.
+
+**Scope (minimum for demo):**
+- Add `write_goal(title, target_amount, target_date, current_amount=0)` agent tool — single insert into `goals`.
+- Add `list_goals()` agent tool — returns user's goals so the LLM can decide which `goal_id` to feed `check_goal_pace`.
+- Backend: optional — agent tools write directly to Atlas via motor, no backend route needed for the chat path. Add `GET /goals` only if dashboard needs it.
+- Dashboard widget: read goals via new `GET /goals`, render alongside StatCards. Empty state with "ask MoneyMind to set a goal" copy.
+
+**Files to touch:** `agent/tools/write_goal.py` (NEW), `agent/tools/list_goals.py` (NEW), `agent/graphs/main.py` (register 2 tools + descriptions), `agent/prompts/system.py` (1 paragraph on goal triggers — "user mentions saving for X, call write_goal"), `backend/app/api/goals.py` (NEW, GET only), `frontend/components/dashboard/goals-widget.tsx` (NEW), `frontend/app/dashboard/page.tsx` (mount it).
+
+**Pattern reference:** mirror the write_memory + check_goal_pace pattern. tool → _wrap_tool registration → backend GET route → dashboard widget reads via Clerk proxy. Same flow as the intervention wiring shipped today.
+
+**Effort:** 4-6h for @mahyar (agent tools + backend GET + dashboard widget all on the same head).
+**Owner:** @mahyar (full stack)
+**Demo value:** HIGH — closes the "agent learns about your goals" slide which is currently invisible.
+**Risk:** LOW — additive only, no existing tool changes.
+**AC:**
+- [ ] User says "I want to save $5000 for a trip to Japan by December" → agent calls `write_goal` → returns `goal_id`.
+- [ ] User says "how am I doing on my goals?" → agent calls `list_goals` then `check_goal_pace` for each → reply names actual progress.
+- [ ] Dashboard renders goals widget with progress bars and pace status.
+- [ ] Empty state shows on dashboard until first goal exists.
+
+**Recommendation:** **ship-must** — without this, slide-7 (goal pace) is a dead demo beat.
+
+---
+
+### V2 — Dashboard polish: month selector + better charts
+
+**Current state (verified 2026-06-06):**
+- ✅ 4 dashboard components shipped: [`spend-chart.tsx`](frontend/components/dashboard/spend-chart.tsx), [`category-breakdown.tsx`](frontend/components/dashboard/category-breakdown.tsx), [`stat-cards.tsx`](frontend/components/dashboard/stat-cards.tsx), [`transactions-list.tsx`](frontend/components/dashboard/transactions-list.tsx), [`inbox.tsx`](frontend/components/dashboard/inbox.tsx).
+- ✅ Dashboard reads live via `/api/agg/weekly`, `/api/transactions`, `/api/inbox`.
+- ❌ No month / date-range selector. Dashboard always shows the same fixed window.
+- ❌ Backend `/agg/weekly` doesn't accept `date_from` / `date_to` params (`grep` returns no hits).
+- ❌ No goal widget (depends on V1).
+- ❌ No top-merchants widget.
+
+**Scope (minimum for "real finance app" feel):**
+- Month selector dropdown at top of dashboard ("June 2026 ▾"). Pipes a `date_from` + `date_to` into the 3 dashboard fetches.
+- Backend: add `?month=YYYY-MM` optional param to `/agg/weekly` and `/transactions`. Backwards-compatible (default = current behavior).
+- New "top merchants" widget — group by `merchant_canonical`, sum, show top 5. Reuses existing `/transactions` data.
+- Goal widget — depends on V1.
+
+**Files to touch:** `frontend/app/dashboard/page.tsx` (selector state + plumb date range), `frontend/components/dashboard/month-selector.tsx` (NEW), `frontend/components/dashboard/top-merchants.tsx` (NEW), `backend/app/api/agg.py` + `backend/app/api/transactions.py` (add optional month param), `backend/app/aggregations/weekly.py` (accept date range).
+
+**Effort:** 3-5h for @aidin (frontend) + 1-2h for @mahyar (backend month param).
+**Owner:** @aidin frontend, @mahyar backend
+**Demo value:** HIGH — single biggest visual upgrade. Makes the demo URL look like a shipped product.
+**Risk:** MEDIUM — month param changes touch live endpoints. Keep defaults backwards-compatible; smoke-test before video.
+**AC:**
+- [ ] Selector defaults to current month, lets user pick any month with transactions.
+- [ ] All 4 widgets (StatCards, SpendChart, CategoryBreakdown, TransactionsList) respect the selection.
+- [ ] Empty months render an empty state, not a crash.
+- [ ] Top-merchants widget shows 5 merchants with $ totals.
+
+**Recommendation:** **ship-must** — Aidin's already on this lane.
+
+---
+
+### V3 — Agent deletes a wrong memory ("forget what I said about X")
+
+**Current state (verified 2026-06-06):**
+- ✅ `write_memory` works (proven tonight, first memories now in Atlas).
+- ✅ `recall_memory` works.
+- ❌ No `delete_memory` / `forget_memory` agent tool exists in `agent/tools/`.
+- ❌ `recall_memory` has no `deleted_at` filter (`grep` confirms).
+- ❌ No backend `DELETE /memories` route.
+- ❌ No `user_context` delete path either.
+
+**Scope (minimum for the privacy beat):**
+- Soft-delete: add `deleted_at: datetime | None` field to memories docs. `recall_memory`'s aggregation filters out `deleted_at != null`.
+- New agent tool: `forget_memory(query: str)` — vector-searches for the user's query, returns top match with `summary` for confirmation, sets `deleted_at = now()` on the match. Idempotent.
+- Confirmation pattern: agent reply names the memory it's about to forget ("Want me to forget that you're bulking? — yes/no") and waits one turn. **Critical** — without this, the agent could over-delete.
+- Same approach for `user_context` if we have time; otherwise scope to memories only.
+
+**Files to touch:** `agent/tools/forget_memory.py` (NEW), `agent/tools/recall_memory.py` (add `deleted_at: null` filter to the `$match` stage), `agent/graphs/main.py` (register tool + description), `agent/prompts/system.py` (1 paragraph: when user says "forget" / "delete that" / "you were wrong about", confirm then call `forget_memory`).
+
+**Effort:** 2-3h for @mahyar.
+**Owner:** @mahyar
+**Demo value:** MEDIUM — the privacy story matters for judging. "What if it learned the wrong thing?" gets a clean live answer.
+**Risk:** LOW if soft-delete. MEDIUM if we let the agent delete without confirmation (could nuke real memories on misread).
+**AC:**
+- [ ] User says "forget what I said about bulking" → agent finds the memory, names it, asks to confirm.
+- [ ] On "yes", `deleted_at` is set; next `recall_memory` for the same query returns no hits.
+- [ ] On "no", nothing changes.
+- [ ] Unit test: deleted memories don't appear in `recall_memory` aggregations.
+
+**Recommendation:** **ship-if-time** — strong privacy story but not load-bearing for the core demo. Skip if V1/V2 eat the budget.
+
+---
+
+### V4 — CSV / bank statement upload + per-month transaction edit
+
+**Current state (verified 2026-06-06):**
+- ✅ Backend `/ingest/csv` exists in [`backend/app/api/ingest.py`](backend/app/api/ingest.py), Clerk-authed via `current_user`.
+- ❌ No frontend UI for CSV upload (users can't bring their own data through the product).
+- ❌ No `PATCH /transactions/:id`, no `DELETE /transactions/:id`, no `POST /transactions` (manual add).
+- ❌ No PDF / image / statement parser anywhere in the codebase.
+
+**Part A — CSV upload from chat/dashboard (the cheap, high-value half):**
+- Add `+ Upload statement` button in chat composer (or as a Dashboard card).
+- Vercel proxy: `frontend/app/api/ingest/csv/route.ts` — forwards multipart upload to backend with Bearer token.
+- After upload, post a system message in chat: "Ingested N transactions from your statement."
+- Trigger dashboard refresh.
+
+**Part B — Bank statement PDF → CSV via Gemini (the expensive half — research result):**
+- Gemini 2.5 Flash on Vertex AI **does support PDF/image input natively** (multimodal input, up to 3000 pages per call).
+- Realistic for a single one-page Chase / RBC / TD statement. Lossy on:
+  - Multi-currency statements (FX line items)
+  - Refunds / pending vs posted
+  - Multi-page statements with category footers
+  - Foreign banks with non-standard layouts
+- Cost: ~$0.01-0.05 per statement processed (Flash pricing × typical statement size).
+- **Demo-day risk: HIGH.** If a judge uploads their actual bank PDF and the parse hallucinates an amount, the agent's analysis is now based on fake data. The memory loop poisons.
+- Mitigation: parse → show extracted transactions in a confirm UI → user approves → ingest. NOT auto-ingest.
+
+**Part C — Per-month edit UI (the scope creep):**
+- Users editing transactions in the UI requires `PATCH /transactions/:id`, `DELETE /transactions/:id`, optionally `POST /transactions`.
+- This is a real CRUD UI with date pickers, category dropdowns, optimistic updates.
+- Effort: 6-8h frontend + 2-3h backend + tests. **Too much for the remaining window.**
+
+**Scope (minimum for demo):**
+- **Ship Part A only.** CSV upload from chat → existing `/ingest/csv` → success toast → dashboard refresh.
+- **Defer Part B (PDF parse).** Note in backlog as "post-hackathon — needs confirmation UX to be safe."
+- **Defer Part C (edit UI).** Note as "post-hackathon — judges don't need to edit, they need to see analysis."
+
+**Files to touch (Part A only):** `frontend/app/api/ingest/csv/route.ts` (NEW Vercel proxy), `frontend/components/chat/upload-button.tsx` (NEW file picker + multipart POST), `frontend/app/chat/page.tsx` (mount upload button + render system message on success).
+
+**Effort:** 2-3h (Part A only).
+**Owner:** TBD — @mahyar to discuss with team after V1+V2 land. Skip if the team is at capacity; pitch isn't blocked on this.
+**Demo value:** HIGH — "bring your own data" is the difference between toy demo and real product.
+**Risk:** LOW for Part A (existing backend works). HIGH for Part B if we tried it.
+**AC:**
+- [ ] `+ Upload statement` button visible in chat composer.
+- [ ] Selecting a CSV file with `date,merchant,category,amount,currency` columns → POST to backend → success.
+- [ ] Chat shows "Ingested 28 transactions" system message.
+- [ ] Dashboard reflects the new data on refresh.
+- [ ] Bad CSV format returns a clean error in chat, not a crash.
+
+**Recommendation:** **ship-if-time** — Part A is high-leverage. PDF parse explicitly **defer**: not worth the demo-day risk.
+
+---
+
+### V5 — Switch model to Gemini 3 (eligibility safety)
+
+**Current state (verified 2026-06-06):**
+- Code currently uses [`MODEL_NAME = "gemini-2.5-flash"`](agent/graphs/main.py#L58) on Vertex AI via `ChatVertexAI`.
+- The Devpost rule text says: *"Build a functional agent—powered by Gemini and Google Cloud Agent Builder"*. Multiple secondary summaries of the rules name **Gemini 3** specifically as the required model.
+- Likely the rule means "Gemini family" (2.5 is current GA, 3 is newest), but the wording is ambiguous enough that a strict judge could flag it.
+
+**Scope (minimum):**
+- Change one line: [`agent/graphs/main.py:58`](agent/graphs/main.py#L58) `gemini-2.5-flash` → `gemini-3-flash` (confirm the exact Vertex AI model ID at the time of the swap — it may be `gemini-3-flash-001` or similar).
+- Re-run the live 3-message birthday-party + memory smoke test on prod to confirm reply quality is at least as good.
+- If latency regresses past ~10s warm, revert and frame Devpost prose around "Gemini family on Vertex AI" as the fallback story.
+
+**Files to touch:** `agent/graphs/main.py:58` (one line). Optionally `agent/prompts/system.py` tuning if Gemini 3's tool-following behavior differs noticeably from 2.5 Flash's.
+
+**Effort:** 15-30 min including the smoke test.
+**Owner:** @mahyar
+**Demo value:** ELIGIBILITY INSURANCE — removes any reading of the rule that disqualifies us. Demo quality unaffected either way.
+**Risk:** LOW — easy revert if Gemini 3 introduces latency or tool-call regressions. The streaming + lifespan + async loop fixes from today are model-agnostic.
+**AC:**
+- [ ] `MODEL_NAME` swapped to the current Gemini 3 Vertex AI model ID.
+- [ ] Live 3-message flow ("I'm DoorDashing... busy week" → accept → "what do you remember") on prod still produces a memory write + recall.
+- [ ] Atlas `memories` count for the Clerk user goes up after the test.
+- [ ] No regression in warm chat latency past ~10s.
+
+**Recommendation:** **ship-must** — do this morning before any judging happens. Cheap insurance.
+
+---
+
+### Vision-backlog overall recommendation
+
+With ~5 days to submission and today already burned on a marathon bug-fix:
+
+| Priority | Item | Why |
+|---|---|---|
+| 1 | **V5 Gemini 3 swap** | 15 min, eligibility insurance, do first |
+| 2 | **V2 dashboard polish** | @aidin frontend + @mahyar backend; biggest visual delta |
+| 3 | **V1 goals (write + list + dashboard widget)** | @mahyar full stack; closes slide-7's dead beat |
+| 4 | V3 memory delete | @mahyar if time after V1+V2 |
+| 5 | V4 Part A CSV upload | Team discussion after V1+V2 land |
+
+**Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items.
 
