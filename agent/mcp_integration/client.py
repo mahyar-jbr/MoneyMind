@@ -70,9 +70,17 @@ async def get_mcp_tools() -> list[BaseTool]:
     Singleton: the subprocess + client are spawned exactly once per process.
     Returns `[]` (NOT raises) on any spawn failure so the agent still boots
     with the 11 native tools. Failure is logged at WARNING.
+
+    Env override: `MONGODB_MCP_DISABLE=1` skips the spawn entirely and
+    returns []. Use this when you need to rule out MCP as a hang source.
     """
     global _client, _tools, _init_error
     if _tools is not None:
+        return _tools
+
+    if os.environ.get("MONGODB_MCP_DISABLE"):
+        _tools = []
+        logger.info("MongoDB MCP disabled by MONGODB_MCP_DISABLE; using native tools only.")
         return _tools
 
     try:
