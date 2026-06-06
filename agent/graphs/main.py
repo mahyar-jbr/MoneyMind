@@ -21,13 +21,14 @@ from typing import Annotated, Any, NotRequired
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from pydantic import BaseModel, create_model
 
 from agent.graphs.context import fetch_active_context, format_active_context
+from agent.mcp_integration.client import get_mcp_tools
 from agent.prompts.system import SYSTEM_PROMPT
 from agent.tools.check_goal_pace import CheckGoalPaceInput, check_goal_pace
 from agent.tools.get_spend_anomaly import GetSpendAnomalyInput, get_spend_anomaly
@@ -218,8 +219,14 @@ def _wrap_tool(
     )
 
 
-def _build_tools() -> list[StructuredTool]:
-    return [
+async def _build_tools() -> list[BaseTool]:
+    """Build the agent's tool list: 11 native tools + MongoDB MCP tools (R1).
+
+    MCP tools come from a Node subprocess (`npx mongodb-mcp-server`) lazily
+    spawned on first call. If the subprocess fails to start, get_mcp_tools()
+    returns [] and the agent still boots with the 11 native tools.
+    """
+    native: list[BaseTool] = [
         _wrap_tool(query_transactions, name="query_transactions", input_model=QueryTransactionsInput),
         _wrap_tool(get_spend_anomaly, name="get_spend_anomaly", input_model=GetSpendAnomalyInput),
         _wrap_tool(recall_memory, name="recall_memory", input_model=RecallMemoryInput),
@@ -232,6 +239,8 @@ def _build_tools() -> list[StructuredTool]:
         _wrap_tool(schedule_reminder, name="schedule_reminder", input_model=ScheduleReminderInput),
         _wrap_tool(summarize_week, name="summarize_week", input_model=SummarizeWeekInput),
     ]
+    mcp = await get_mcp_tools()
+    return [*native, *mcp]
 
 
 # ─── Prompt builder (called per turn by create_react_agent) ────────────────────────
@@ -270,13 +279,18 @@ def _build_llm() -> BaseChatModel:
     return ChatVertexAI(model=MODEL_NAME, project=project, location=location)
 
 
-def build_graph(
+async def build_graph(
     *,
     llm: BaseChatModel | None = None,
     context_collection=None,
 ):
     """Compile the agent graph. llm + context_collection are kept for
     tests that need to inject; production callers leave them None.
+
+    Async because R1's MongoDB MCP integration lazy-spawns a Node subprocess
+    on the first tool-list call (`agent.mcp_integration.client.get_mcp_tools`). Tests
+    that previously called `build_graph(...)` need to switch to
+    `await build_graph(...)`.
 
     NOTE: context_collection is not used by the graph itself anymore —
     the active-context fetch happens in run_chat / stream_chat BEFORE
@@ -290,7 +304,7 @@ def build_graph(
     _ = context_collection
     return create_react_agent(
         model=llm or _build_llm(),
-        tools=_build_tools(),
+        tools=await _build_tools(),
         state_schema=ChatState,
         prompt=_prompt_builder,
     )
@@ -341,7 +355,7 @@ def _content_to_text(content: Any) -> str:
 
 async def arun_chat(user_id: str, message: str) -> str:
     """Run a single turn (async). Use this from inside an existing event loop."""
-    compiled = build_graph()
+    compiled = await build_graph()
     initial = await _build_initial_state(user_id, message)
     result = await compiled.ainvoke(initial)
     return _content_to_text(result["messages"][-1].content)
@@ -359,9 +373,18 @@ def stream_chat(user_id: str, message: str) -> Iterator[str]:
     Must NOT be called from inside a running event loop. Coerces content
     blocks (gemini-2.5-flash sometimes wraps in list[dict]) to plain text
     so the wire format stays text/plain.
+
+    build_graph is async (since R1 — MCP subprocess discovery), so we run
+    both the build and the initial-state fetch on the same asyncio.run loop
+    before draining the sync `.stream(...)` from compiled.
     """
-    compiled = build_graph()
-    initial = asyncio.run(_build_initial_state(user_id, message))
+
+    async def _prep() -> tuple[Any, dict]:
+        compiled = await build_graph()
+        initial = await _build_initial_state(user_id, message)
+        return compiled, initial
+
+    compiled, initial = asyncio.run(_prep())
     for chunk, metadata in compiled.stream(initial, stream_mode="messages"):
         if metadata.get("langgraph_node") != "agent":
             continue

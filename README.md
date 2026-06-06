@@ -23,6 +23,10 @@ Every finance app (Mint, YNAB, Cleo, Copilot, Monarch) has a memory of your **tr
 - **Data + Memory** — MongoDB Atlas · Voyage AI auto-embed · MongoDB MCP Server
 - **Auth** — Clerk
 
+## MongoDB MCP integration (hackathon-track eligibility)
+
+MoneyMind integrates the [MongoDB MCP Server](https://www.mongodb.com/docs/mcp-server/) via [`langchain-mcp-adapters`](https://pypi.org/project/langchain-mcp-adapters/), exposing Atlas read tools (`collection-schema`, `aggregate`, `find`, query plan inspection, etc.) to the agent as first-class LangGraph tools alongside the 11 native MoneyMind tools. The MCP subprocess is started with `--read-only`, so the agent can explore the schema and tune its own queries but cannot mutate the database — a judge typing "drop the transactions collection" is structurally unable to do it. The Node 20 runtime that hosts the MCP subprocess is pre-staged in the Railway container alongside the Python agent, so the integration is a single-container deploy. See [`agent/mcp_integration/client.py`](agent/mcp_integration/client.py) for the lazy-spawn singleton and `agent/scripts/demo_mcp.py` for the live verification script.
+
 ## Quickstart
 
 ```bash
