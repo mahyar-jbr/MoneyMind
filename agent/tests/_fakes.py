@@ -54,9 +54,16 @@ class FakeCollection:
         self.pipelines.append(pipeline)
         # Apply $match score floor in Python so the score filter is testable.
         score_floor = 0.0
+        # Detect post-search $match { deleted_at: None } — V3 filters
+        # soft-deleted memories outside the $vectorSearch index since
+        # deleted_at is not declared as a filterable field on the index.
+        filter_deleted = False
         for stage in pipeline:
-            if "$match" in stage and "score" in stage["$match"]:
-                score_floor = stage["$match"]["score"].get("$gte", 0.0)
+            if "$match" in stage:
+                if "score" in stage["$match"]:
+                    score_floor = stage["$match"]["score"].get("$gte", 0.0)
+                if stage["$match"].get("deleted_at") == {"$eq": None}:
+                    filter_deleted = True
         # Apply $vectorSearch limit + user_id/type filter on the canned set.
         vs = pipeline[0].get("$vectorSearch", {})
         limit = vs.get("limit", len(self._docs))
@@ -66,6 +73,8 @@ class FakeCollection:
             if "user_id" in vf and d.get("user_id") != vf["user_id"]["$eq"]:
                 continue
             if "type" in vf and d.get("type") != vf["type"]["$eq"]:
+                continue
+            if filter_deleted and d.get("deleted_at") is not None:
                 continue
             if d.get("score", 0.0) < score_floor:
                 continue
@@ -115,6 +124,50 @@ class FakeCollection:
 
     def bulk_write(self, *a, **kw):
         return self._trip("bulk_write")
+
+
+class VectorSearchWritableCollection(FakeCollection):
+    """FakeCollection variant that allows `update_one` for V3 (forget_memory).
+
+    forget_memory needs to BOTH read via $vectorSearch (no mongomock support)
+    AND write via update_one to set deleted_at. The base FakeCollection
+    trips on every write; this subclass implements a minimal in-memory
+    update_one that matches docs by _id + extra filter clauses, applies the
+    $set update, and returns an object with .modified_count.
+
+    Other write methods still trip — only update_one is allowed.
+    """
+
+    class _UpdateResult:
+        def __init__(self, modified_count: int):
+            self.modified_count = modified_count
+            self.matched_count = modified_count
+
+    async def update_one(self, filter: dict, update: dict):  # noqa: A002
+        # In-memory match against self._docs. Supports flat-key equality
+        # against the doc's stored fields. _id is compared by str() so
+        # tests can pass either ObjectId or already-stringified ids.
+        modified = 0
+        for d in self._docs:
+            if not _matches(d, filter):
+                continue
+            for key, value in update.get("$set", {}).items():
+                d[key] = value
+            modified += 1
+            break  # update_one matches exactly one
+        return self._UpdateResult(modified)
+
+
+def _matches(doc: dict, filter: dict) -> bool:
+    """Tiny filter matcher — equality only, with str-coerced _id support."""
+    for key, expected in filter.items():
+        actual = doc.get(key)
+        if key == "_id":
+            if str(actual) != str(expected):
+                return False
+        elif actual != expected:
+            return False
+    return True
 
 
 def make_fake_embedder(dim: int = 1024) -> Callable[[str], Awaitable[list[float]]]:

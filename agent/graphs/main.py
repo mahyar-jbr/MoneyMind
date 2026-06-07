@@ -37,6 +37,7 @@ from agent.tools.propose_intervention import (
     ProposeInterventionInput,
     propose_intervention,
 )
+from agent.tools.forget_memory import ForgetMemoryInput, forget_memory
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
 from agent.tools.recall_memory import RecallMemoryInput, recall_memory
 from agent.tools.respond_to_intervention import (
@@ -116,6 +117,18 @@ _DESCRIPTIONS = {
         "lifestyle ('I'm bulking'), event ('exam week'), preference, or "
         "constraint. Insert-only — never used to correct prior context. Set "
         "active_from/active_until if the user gave a time range."
+    ),
+    "forget_memory": (
+        "REQUIRED whenever the user asks the agent to forget, delete, or "
+        "drop something it remembers — 'forget what I said about X', "
+        "'you were wrong about Y', 'delete that, that's not true anymore'. "
+        "Vector-searches the user's non-deleted memories for {query}; soft-"
+        "deletes the top match if confidence is high enough. The tool will "
+        "return one of three shapes: (1) deleted=True with a summary — tell "
+        "the user what you just forgot. (2) needs_confirmation=True with a "
+        "summary — quote it back and ask 'is this the one?' before calling "
+        "again. (3) deleted=False with no memory_id — tell the user nothing "
+        "matched. Use the user's own words as the query — do not paraphrase."
     ),
     "check_goal_pace": (
         "Return a pace verdict for a single goal — ahead / on_track / "
@@ -223,17 +236,18 @@ def _wrap_tool(
 
 
 async def _build_tools() -> list[BaseTool]:
-    """Build the agent's tool list: 11 native tools + MongoDB MCP tools (R1).
+    """Build the agent's tool list: 12 native tools + MongoDB MCP tools (R1).
 
     MCP tools come from a Node subprocess (`npx mongodb-mcp-server`) lazily
     spawned on first call. If the subprocess fails to start, get_mcp_tools()
-    returns [] and the agent still boots with the 11 native tools.
+    returns [] and the agent still boots with the 12 native tools.
     """
     native: list[BaseTool] = [
         _wrap_tool(query_transactions, name="query_transactions", input_model=QueryTransactionsInput),
         _wrap_tool(get_spend_anomaly, name="get_spend_anomaly", input_model=GetSpendAnomalyInput),
         _wrap_tool(recall_memory, name="recall_memory", input_model=RecallMemoryInput),
         _wrap_tool(write_memory, name="write_memory", input_model=WriteMemoryInput),
+        _wrap_tool(forget_memory, name="forget_memory", input_model=ForgetMemoryInput),
         _wrap_tool(update_user_context, name="update_user_context", input_model=UpdateUserContextInput),
         _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
         _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),

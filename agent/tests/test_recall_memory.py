@@ -268,7 +268,18 @@ async def test_pipeline_includes_correct_filters_and_index_name():
     assert vs["path"] == "embedding"
     assert vs["limit"] == 7
     assert vs["numCandidates"] == 7 * 20
+    # V3: deleted_at is filtered POST-search via a $match stage (Atlas
+    # vector index doesn't have deleted_at as a filterable field), so the
+    # in-index filter remains user_id + optional type only.
     assert vs["filter"] == {"user_id": {"$eq": "u_482"}, "type": {"$eq": "pattern"}}
+    # The pipeline must contain an explicit $match { deleted_at: null }
+    # stage. {$eq: null} matches both missing and explicitly-null fields
+    # so memories written before V3 landed are still recalled.
+    deleted_filter_stages = [
+        s for s in pipeline
+        if "$match" in s and s["$match"].get("deleted_at") == {"$eq": None}
+    ]
+    assert deleted_filter_stages, "recall_memory must filter soft-deleted memories"
     # last stage projects only safe fields (no embedding leak)
     proj = pipeline[-1]["$project"]
     assert "embedding" not in proj

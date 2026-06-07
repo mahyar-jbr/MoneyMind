@@ -68,6 +68,12 @@ def _build_pipeline(params: RecallMemoryInput, query_vector: list[float]) -> lis
             }
         },
         {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
+        # V3: never surface memories the user has asked to forget.
+        # deleted_at is NOT declared as a filterable field in the Atlas
+        # vector index, so we filter post-search via $match. {$eq: null}
+        # matches both missing and explicitly-null deleted_at, so memories
+        # written before V3 landed are still recalled normally.
+        {"$match": {"deleted_at": {"$eq": None}}},
         {"$match": {"score": {"$gte": params.min_score}}},
         {
             "$project": {

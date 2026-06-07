@@ -164,33 +164,41 @@
 
 ### V3 — Agent deletes a wrong memory ("forget what I said about X")
 
-**Current state (verified 2026-06-06):**
-- ✅ `write_memory` works (proven tonight, first memories now in Atlas).
-- ✅ `recall_memory` works.
-- ❌ No `delete_memory` / `forget_memory` agent tool exists in `agent/tools/`.
-- ❌ `recall_memory` has no `deleted_at` filter (`grep` confirms).
-- ❌ No backend `DELETE /memories` route.
-- ❌ No `user_context` delete path either.
+**✅ DONE 2026-06-06 EOD.** Implemented + locally verified end-to-end against live Atlas.
 
-**Scope (minimum for the privacy beat):**
-- Soft-delete: add `deleted_at: datetime | None` field to memories docs. `recall_memory`'s aggregation filters out `deleted_at != null`.
-- New agent tool: `forget_memory(query: str)` — vector-searches for the user's query, returns top match with `summary` for confirmation, sets `deleted_at = now()` on the match. Idempotent.
-- Confirmation pattern: agent reply names the memory it's about to forget ("Want me to forget that you're bulking? — yes/no") and waits one turn. **Critical** — without this, the agent could over-delete.
-- Same approach for `user_context` if we have time; otherwise scope to memories only.
+**What shipped:**
+- NEW [`agent/tools/forget_memory.py`](agent/tools/forget_memory.py) — soft-delete + confidence-gated single-turn confirmation pattern. Score ≥ 0.75 → tool deletes immediately + returns summary so the agent names what was forgotten. Score < 0.75 → returns `needs_confirmation=True` for the agent to quote the candidate back and ask. No match → returns `deleted=False`, `memory_id=None`.
+- [`agent/tools/recall_memory.py`](agent/tools/recall_memory.py) — post-search `$match { deleted_at: null }` so soft-deleted memories never surface. `{$eq: null}` matches both missing and explicitly-null, so memories written before V3 land are still recalled — no migration needed.
+- [`agent/tools/write_memory.py`](agent/tools/write_memory.py) — sets `deleted_at: null` on insert so the field is present on every new memory.
+- [`agent/graphs/main.py`](agent/graphs/main.py) — `forget_memory` registered as the 12th native tool with a tool description that makes the call REQUIRED on any "forget X" / "you were wrong" / "delete that" message.
+- [`agent/prompts/system.py`](agent/prompts/system.py) — new FORGETTING section with three result-shape branches + example replies. Anti-pattern added: never invent your own query, pass the user's words verbatim.
+- NEW [`agent/tests/test_forget_memory.py`](agent/tests/test_forget_memory.py) — 7 hermetic tests including a user_id isolation tripwire (must never delete another user's memory) and a second-call-after-delete idempotency check.
+- [`agent/tests/_fakes.py`](agent/tests/_fakes.py) — new `VectorSearchWritableCollection` that allows `update_one` (other writes still trip). `FakeCollection.aggregate` updated to honor post-search `$match deleted_at` filter.
 
-**Files to touch:** `agent/tools/forget_memory.py` (NEW), `agent/tools/recall_memory.py` (add `deleted_at: null` filter to the `$match` stage), `agent/graphs/main.py` (register tool + description), `agent/prompts/system.py` (1 paragraph: when user says "forget" / "delete that" / "you were wrong about", confirm then call `forget_memory`).
+**Bug caught + fixed during V3 development (production-relevant):**
+The Atlas vector index `memories_vector_idx` does NOT declare `deleted_at` as a filterable field. Initial implementation put it inside the `$vectorSearch` filter → silent zero results, agent thought nothing matched. Fixed by moving the filter to a post-search `$match` stage. Production-correct without needing Atlas console reindexing. Same fix applied to recall_memory's pipeline.
 
-**Effort:** 2-3h for @mahyar.
+**Live trace verified against real Atlas:**
+```
+before: memories visible=1 (tag=user_is_doordashing), soft-deleted=0
+user: "forget that I'm DoorDashing every night, that was just one bad week"
+agent CALL: forget_memory(query="I've been DoorDashing every night...")
+tool: {deleted=true, memory_id=6a24a0c97..., summary=...}
+agent reply: "Got it — I've forgotten that you were DoorDashing every night."
+after: memories visible=0, soft-deleted=1
+```
+
+**Tests:** 45/45 memory-triad pass (write + recall + forget). Ruff clean.
+
+**AC results:**
+- [x] User says "forget that I'm DoorDashing" → agent calls forget_memory + Atlas flips deleted_at + agent names what was forgotten.
+- [x] On low confidence the tool returns needs_confirmation=True; agent quotes the candidate before re-calling.
+- [x] On no match the tool returns memory_id=null; agent says nothing matched.
+- [x] recall_memory no longer surfaces soft-deleted memories (test_pipeline_filters_deleted + live trace).
+- [x] user_id isolation tripwire in tests — must NEVER delete another user's memory.
+
 **Owner:** @mahyar
-**Demo value:** MEDIUM — the privacy story matters for judging. "What if it learned the wrong thing?" gets a clean live answer.
-**Risk:** LOW if soft-delete. MEDIUM if we let the agent delete without confirmation (could nuke real memories on misread).
-**AC:**
-- [ ] User says "forget what I said about bulking" → agent finds the memory, names it, asks to confirm.
-- [ ] On "yes", `deleted_at` is set; next `recall_memory` for the same query returns no hits.
-- [ ] On "no", nothing changes.
-- [ ] Unit test: deleted memories don't appear in `recall_memory` aggregations.
-
-**Recommendation:** **ship-if-time** — strong privacy story but not load-bearing for the core demo. Skip if V1/V2 eat the budget.
+**Recommendation:** SHIPPED — closes the "what if the agent learned the wrong thing?" privacy beat for the demo.
 
 ---
 
@@ -254,8 +262,8 @@ With ~5 days to submission and today already burned on a marathon bug-fix:
 |---|---|---|
 | 1 | **V2 dashboard polish** | @aidin frontend + @mahyar backend; biggest visual delta |
 | 2 | **V1 goals (write + list + dashboard widget)** | @mahyar full stack; closes slide-7's dead beat |
-| 3 | V3 memory delete | @mahyar if time after V1+V2 |
-| 4 | V4 Part A CSV upload | Team discussion after V1+V2 land |
+| ✅ | ~~V3 memory delete~~ | **DONE 2026-06-06 EOD** — soft-delete + confidence-gated single-turn; live-verified on Atlas (visible 1→0, soft-deleted 0→1) |
+| 3 | V4 Part A CSV upload | Team discussion after V1+V2 land |
 
 **Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items.
 

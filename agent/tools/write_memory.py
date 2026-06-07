@@ -100,6 +100,9 @@ async def write_memory(
         "created_at": created_at,
         "last_used": None,
         "use_count": 0,
+        # V3 — forget_memory flips this to a datetime; recall_memory's
+        # $vectorSearch filter excludes any doc where deleted_at != null.
+        "deleted_at": None,
     }
 
     result = await collection.insert_one(doc)
