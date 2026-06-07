@@ -83,8 +83,31 @@ async def _validation_to_400(request: Request, exc: RequestValidationError) -> J
     return JSONResponse(status_code=400, content={"detail": exc.errors()})
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1)
+
+
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1)
+    """Two-shape request body for backwards compatibility:
+      - {"messages": [{"role": "user"|"assistant", "content": str}, ...]}
+        is the production shape — carries the full conversation thread so
+        multi-turn features (V3 forget_memory confirmation, slide-8 chain)
+        can see prior tool calls + replies.
+      - {"message": str} is the legacy single-turn shape; kept so existing
+        tests + curl smoke scripts don't break. Treated as a one-message
+        history with role="user".
+    """
+
+    message: str | None = Field(default=None, min_length=1)
+    messages: list[ChatMessage] | None = Field(default=None, min_length=1)
+
+    def to_history(self) -> str | list[dict]:
+        if self.messages is not None:
+            return [{"role": m.role, "content": m.content} for m in self.messages]
+        if self.message is not None:
+            return self.message
+        raise ValueError("ChatRequest requires either `messages` or `message`")
 
 
 def _require_loopback_client(request: Request) -> None:
@@ -130,9 +153,14 @@ async def chat(
                 detail="agent warming up; retry in a few seconds",
             )
 
+    try:
+        history = payload.to_history()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     async def tokens():
         try:
-            async for chunk in astream_chat(user_id, payload.message):
+            async for chunk in astream_chat(user_id, history):
                 yield chunk
         except Exception:
             logger.exception("agent run failed")

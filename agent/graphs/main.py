@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Annotated, Any, NotRequired
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langgraph.prebuilt import InjectedState, create_react_agent
@@ -121,21 +121,23 @@ _DESCRIPTIONS = {
     "forget_memory": (
         "REQUIRED whenever the user asks the agent to forget, delete, or "
         "drop something it remembers — 'forget what I said about X', "
-        "'you were wrong about Y', 'delete that'. Two call shapes: "
+        "'you were wrong about Y', 'delete that'. Two call patterns: "
         "(A) FIRST forget request: pass query=<user's own words>. Tool "
-        "vector-searches non-deleted memories and either soft-deletes "
-        "the top match (deleted=True with summary) or returns "
-        "needs_confirmation=True with a memory_id + summary if the match "
-        "is below the high-confidence threshold. "
-        "(B) USER CONFIRMED a previous needs_confirmation question: pass "
-        "memory_id=<the id from that previous result>. Skips the search "
-        "and deletes directly. The user just said 'yes' to your "
-        "'is this the one?' question — you MUST re-call with memory_id "
-        "now, otherwise the memory stays. "
+        "vector-searches and either soft-deletes the top match (returns "
+        "deleted=True + summary) OR returns needs_confirmation=True with "
+        "summary if the score is below the high-confidence threshold. "
+        "(B) USER CONFIRMED a previous needs_confirmation question with "
+        "'yes' / 'yeah' / 'that's the one': pass query=<the exact summary "
+        "text you quoted to the user in your previous question>. That "
+        "exact string scores ~0.88 against itself in vector search, well "
+        "above the 0.75 threshold, so the tool will delete cleanly. DO "
+        "NOT pass memory_id (the id from the previous result is not in "
+        "your context — passing one would be hallucinated). DO NOT pass "
+        "the user's 'yes' as the query. Pass the SUMMARY text only. "
         "Three result shapes: (1) deleted=True — tell the user what you "
-        "just forgot. (2) needs_confirmation=True — quote the summary and "
-        "ask 'is this the one?'. (3) deleted=False, memory_id=None — tell "
-        "the user nothing matched. NEVER pass both query and memory_id."
+        "just forgot. (2) needs_confirmation=True — quote the summary "
+        "and ask 'is this the one?'. (3) deleted=False, memory_id=None "
+        "— tell the user nothing matched."
     ),
     "check_goal_pace": (
         "Return a pace verdict for a single goal — ahead / on_track / "
@@ -335,19 +337,46 @@ async def build_graph(
 
 
 async def _build_initial_state(
-    user_id: str, message: str, *, context_collection=None
+    user_id: str,
+    message: str | list[dict],
+    *,
+    context_collection=None,
 ) -> dict:
     """Pre-fetch active context and build the graph's initial state.
+
+    `message` accepts two shapes:
+      - str — a single user utterance; treated as one HumanMessage.
+        Kept for backwards-compat with run_chat / arun_chat callers.
+      - list[dict] — full conversation history as
+        [{"role": "user" | "assistant", "content": str}, ...]. Used by
+        the chat wire format so multi-turn confirmations (V3 forget_memory
+        follow-up, slide-8 proposal/respond chain) have prior tool calls
+        + replies in scope.
 
     Doing this BEFORE invoking the graph avoids motor's "Future attached
     to a different loop" error that fires when an async DB fetch happens
     inside the graph's sync prompt builder.
     """
     docs = await fetch_active_context(user_id, collection=context_collection)
+    if isinstance(message, str):
+        messages: list = [HumanMessage(content=message)]
+    else:
+        messages = []
+        for m in message:
+            role = m.get("role")
+            content = m.get("content", "")
+            if not content:
+                continue
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+        if not messages:
+            raise ValueError("at least one user message is required")
     return {
         "user_id": user_id,
         "active_context_block": format_active_context(docs),
-        "messages": [HumanMessage(content=message)],
+        "messages": messages,
     }
 
 
@@ -391,8 +420,18 @@ def run_chat(user_id: str, message: str) -> str:
     return asyncio.run(arun_chat(user_id, message))
 
 
-async def astream_chat(user_id: str, message: str) -> AsyncIterator[str]:
+async def astream_chat(
+    user_id: str,
+    message: str | list[dict],
+) -> AsyncIterator[str]:
     """Async streaming entry point — yields only final-LLM tokens as plain text.
+
+    `message` can be either a single user utterance (str — kept for tests
+    and backwards-compat callers) or the full conversation history as a
+    list of {role, content} dicts. Multi-turn features like the V3
+    forget_memory confirmation follow-up need the full history so the
+    agent can see its own prior tool call + result and reason about a
+    bare "yes" response.
 
     This is the production path. Stays on the caller's event loop end-to-end,
     so motor cursors (active-context fetch, memory recall, etc.) all live on

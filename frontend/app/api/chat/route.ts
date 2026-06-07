@@ -27,21 +27,24 @@ export async function POST(req: NextRequest) {
     return new Response("Bad JSON", { status: 400 });
   }
 
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUser?.content) {
+  // Sanity check: must have at least one user message.
+  if (!messages.some((m) => m.role === "user" && m.content?.length)) {
     return new Response("No user message", { status: 400 });
   }
 
-  // Transparent proxy: forward to the backend /chat and pipe its plain-text
-  // token stream straight through, chunk by chunk. User identity comes from
-  // the Clerk JWT; no route accepts a caller-supplied user_id anymore.
+  // Transparent proxy: forward the FULL conversation history to the backend
+  // /chat. Multi-turn features (V3 forget_memory confirmation follow-up,
+  // slide-8 propose/respond chain) need prior tool calls + replies in scope
+  // so the agent can reason about a bare "yes" as confirming the previous
+  // needs_confirmation question, not as a fresh utterance. The pre-V3 wire
+  // forwarded only the last user message — that broke confirmation flows.
   const upstream = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message: lastUser.content }),
+    body: JSON.stringify({ messages }),
   });
 
   if (!upstream.ok || !upstream.body) {
