@@ -213,3 +213,95 @@ async def test_second_forget_call_on_same_memory_finds_nothing():
     # Result: no match, deleted=False, memory_id=None.
     assert second.deleted is False
     assert second.memory_id is None
+
+
+# ─── memory_id confirmation path (V3 follow-up fix) ──────────────────
+
+
+async def test_memory_id_path_deletes_directly_no_vector_search():
+    """When the agent passes memory_id (after user confirms 'yes' to a
+    needs_confirmation response), the tool deletes that exact memory
+    without doing a vector search."""
+    target_id = ObjectId()
+    coll = VectorSearchWritableCollection([
+        # Score is low — would NOT have qualified for high-confidence
+        # delete via the query path. memory_id path bypasses score check.
+        _doc(memory_id=target_id, score=0.4, summary="User is bulking this month"),
+    ])
+
+    result = await forget_memory(
+        ForgetMemoryInput(user_id="u_482", memory_id=str(target_id)),
+        collection=coll,
+        embedder=embedder,
+    )
+
+    assert result.deleted is True
+    assert result.memory_id == str(target_id)
+    assert result.summary == "User is bulking this month"
+    assert result.score is None  # no search happened
+    # Pipeline was NEVER called — the memory_id path doesn't aggregate.
+    assert coll.pipelines == []
+    # Doc is soft-deleted.
+    target = next(d for d in coll._docs if d["_id"] == target_id)
+    assert target["deleted_at"] is not None
+
+
+async def test_memory_id_path_rejects_other_users_id():
+    """User isolation tripwire — memory_id path must respect user_id."""
+    target_id = ObjectId()
+    coll = VectorSearchWritableCollection([
+        _doc(memory_id=target_id, user_id="u_other", score=0.9),
+    ])
+
+    result = await forget_memory(
+        ForgetMemoryInput(user_id="u_482", memory_id=str(target_id)),
+        collection=coll,
+        embedder=embedder,
+    )
+
+    # u_other's memory not visible to u_482 — find_one returns None.
+    assert result.deleted is False
+    assert result.memory_id is None
+    target = next(d for d in coll._docs if d["_id"] == target_id)
+    assert target["deleted_at"] is None  # untouched
+
+
+async def test_memory_id_path_invalid_id_raises():
+    """ObjectId validation guard — agent passing garbage raises ValueError."""
+    coll = VectorSearchWritableCollection([])
+    import pytest
+    with pytest.raises(ValueError, match="invalid memory_id"):
+        await forget_memory(
+            ForgetMemoryInput(user_id="u_482", memory_id="not-an-objectid"),
+            collection=coll,
+            embedder=embedder,
+        )
+
+
+async def test_both_query_and_memory_id_raises():
+    """Agent must pick one. Passing both is a contract violation."""
+    coll = VectorSearchWritableCollection([])
+    import pytest
+    with pytest.raises(ValueError, match="not both"):
+        await forget_memory(
+            ForgetMemoryInput(
+                user_id="u_482",
+                query="bulking",
+                memory_id=str(ObjectId()),
+            ),
+            collection=coll,
+            embedder=embedder,
+        )
+
+
+async def test_neither_query_nor_memory_id_raises():
+    """Schema-level Pydantic optional fields mean both can be None at
+    runtime. The tool must reject that case explicitly."""
+    coll = VectorSearchWritableCollection([])
+    import pytest
+    with pytest.raises(ValueError, match="must pass either"):
+        await forget_memory(
+            ForgetMemoryInput(user_id="u_482"),
+            collection=coll,
+            embedder=embedder,
+        )

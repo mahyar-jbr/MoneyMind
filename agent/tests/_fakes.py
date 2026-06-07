@@ -157,6 +157,15 @@ class VectorSearchWritableCollection(FakeCollection):
             break  # update_one matches exactly one
         return self._UpdateResult(modified)
 
+    async def find_one(self, filter: dict, projection: dict | None = None):  # noqa: A002, ARG002
+        """Minimal find_one for the memory_id confirmation path. projection
+        is accepted but ignored — tests assert on the returned dict's
+        full shape rather than a subset."""
+        for d in self._docs:
+            if _matches(d, filter):
+                return dict(d)  # copy so the caller can't mutate the canned doc
+        return None
+
 
 def _matches(doc: dict, filter: dict) -> bool:
     """Tiny filter matcher — equality only, with str-coerced _id support."""

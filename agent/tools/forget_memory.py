@@ -37,12 +37,27 @@ HIGH_CONFIDENCE = 0.75
 
 class ForgetMemoryInput(BaseModel):
     user_id: str = Field(min_length=1)
-    query: str = Field(
-        min_length=1,
+    # Pass EITHER query (initial search) OR memory_id (after confirmation).
+    # query is vector-searched; memory_id is the literal Mongo _id of a memory
+    # the agent previously surfaced via needs_confirmation and the user just
+    # confirmed. memory_id bypasses the search entirely and deletes directly.
+    query: str | None = Field(
+        default=None,
         max_length=500,
         description=(
             "What the user wants forgotten, in their words. e.g. 'the bulking "
-            "thing' or 'that I don't like Chipotle'. Vector-searched."
+            "thing' or 'that I don't like Chipotle'. Vector-searched. Pass "
+            "this on the FIRST forget call; on a follow-up confirmation, pass "
+            "memory_id instead."
+        ),
+    )
+    memory_id: str | None = Field(
+        default=None,
+        description=(
+            "Pass the memory_id returned by a previous needs_confirmation=True "
+            "result when the user has just confirmed 'yes'. Skips the vector "
+            "search and deletes the matched memory directly. Cannot be passed "
+            "together with query — pick one."
         ),
     )
 
@@ -82,6 +97,49 @@ async def forget_memory(
         collection = get_database().memories
     if embedder is None:
         embedder = embed_query
+
+    # Direct memory_id path: confirmation branch from a prior call. Skip
+    # the vector search and delete the matched memory directly. The
+    # filter clauses ensure user_id isolation + idempotency (won't
+    # re-flip an already-deleted memory).
+    if params.memory_id is not None:
+        if params.query is not None:
+            raise ValueError(
+                "forget_memory: pass query OR memory_id, not both"
+            )
+        try:
+            oid = ObjectId(params.memory_id)
+        except Exception as exc:
+            raise ValueError(f"invalid memory_id: {params.memory_id}") from exc
+        # Fetch the summary so we can return it for the agent's reply.
+        target = await collection.find_one(
+            {"_id": oid, "user_id": params.user_id, "deleted_at": None},
+            {"summary": 1},
+        )
+        if target is None:
+            return ForgetMemoryResult(
+                user_id=params.user_id,
+                query=params.memory_id,
+                deleted=False,
+                needs_confirmation=False,
+            )
+        result = await collection.update_one(
+            {"_id": oid, "user_id": params.user_id, "deleted_at": None},
+            {"$set": {"deleted_at": datetime.now(UTC)}},
+        )
+        return ForgetMemoryResult(
+            user_id=params.user_id,
+            query=params.memory_id,
+            deleted=result.modified_count > 0,
+            needs_confirmation=False,
+            memory_id=params.memory_id,
+            summary=str(target.get("summary", "")),
+            score=None,
+        )
+
+    # Vector-search path: initial forget request.
+    if params.query is None:
+        raise ValueError("forget_memory: must pass either query or memory_id")
 
     query_vector = await embedder(params.query)
 
