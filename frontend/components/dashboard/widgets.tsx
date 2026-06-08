@@ -35,9 +35,15 @@ export const CARD =
   "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[color:var(--color-surface-hi)]/60 to-[color:var(--color-surface)]/40 shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_24px_60px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl";
 
 function DemoTag() {
+  // Amber + bumped contrast + size so the "demo" pill is legible at video
+  // distance. Pre-fix this was text-[9px] with white/[0.04] background —
+  // invisible on 1080p compression. A judge would see the $82k Net worth
+  // KPI and assume Plaid linkage, directly contradicting the MongoDB-track
+  // pitch ("CSV ingest, no bank linking"). Color matches the warning tone
+  // already used elsewhere (insight panel warns).
   return (
-    <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[color:var(--color-fg-muted)]">
-      demo
+    <span className="rounded-full border border-amber-300/40 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+      sample
     </span>
   );
 }

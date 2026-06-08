@@ -57,8 +57,15 @@ export function buildBuckets(
   categoryFilter?: string,
 ): Bucket[] {
   const map = new Map<string, Bucket>();
+  const hasCategoryFilter = !!categoryFilter && categoryFilter !== "all";
   for (const t of txns) {
-    if (categoryFilter && categoryFilter !== "all" && topLevel(t.category) !== categoryFilter) {
+    const isInflow = t.amount > 0;
+    // Apply categoryFilter ONLY to outflows. Income (inflow) has its own
+    // category namespace ("income.salary" etc.) so filtering by "food" or
+    // "shopping" would zero out every salary deposit and silently break the
+    // IncomeExpenses chart + the savings-rate KPI whenever the user picks
+    // a spend category.
+    if (hasCategoryFilter && !isInflow && topLevel(t.category) !== categoryFilter) {
       continue;
     }
     const { key, label, fullLabel } =
@@ -68,12 +75,12 @@ export function buildBuckets(
       b = { key, label, fullLabel, spend: 0, income: 0, byCategory: {} };
       map.set(key, b);
     }
-    if (t.amount < 0) {
+    if (isInflow) {
+      b.income += t.amount;
+    } else {
       const amt = -t.amount;
       b.spend += amt;
       b.byCategory[t.category] = (b.byCategory[t.category] ?? 0) + amt;
-    } else {
-      b.income += t.amount;
     }
   }
   return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
@@ -195,17 +202,25 @@ export function deriveInsights(txns: Transaction[]): Insight[] {
     });
   }
 
-  // projected month-end spend, by pace
+  // projected month-end spend, by pace — only fires when curr is actually
+  // the current calendar month. Otherwise we'd be projecting "this month"
+  // off a stale bucket (e.g. May synthetic data on a June clock → "you'll
+  // spend $14k this month"), which reads as broken on camera.
   if (curr.spend > 0) {
     const now = new Date();
-    const day = now.getUTCDate();
-    const daysInMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getUTCDate();
-    if (day >= 3 && day < daysInMonth) {
-      const projected = (curr.spend / day) * daysInMonth;
-      out.push({
-        tone: "info",
-        text: `At this pace you'll spend about $${Math.round(projected).toLocaleString()} this month.`,
-      });
+    const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (curr.key === currentKey) {
+      const day = now.getUTCDate();
+      const daysInMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0),
+      ).getUTCDate();
+      if (day >= 3 && day < daysInMonth) {
+        const projected = (curr.spend / day) * daysInMonth;
+        out.push({
+          tone: "info",
+          text: `At this pace you'll spend about $${Math.round(projected).toLocaleString()} this month.`,
+        });
+      }
     }
   }
 

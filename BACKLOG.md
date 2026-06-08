@@ -132,33 +132,37 @@
 
 ### V2 — Dashboard polish: month selector + better charts
 
-**Current state (verified 2026-06-06):**
-- ✅ 4 dashboard components shipped: [`spend-chart.tsx`](frontend/components/dashboard/spend-chart.tsx), [`category-breakdown.tsx`](frontend/components/dashboard/category-breakdown.tsx), [`stat-cards.tsx`](frontend/components/dashboard/stat-cards.tsx), [`transactions-list.tsx`](frontend/components/dashboard/transactions-list.tsx), [`inbox.tsx`](frontend/components/dashboard/inbox.tsx).
-- ✅ Dashboard reads live via `/api/agg/weekly`, `/api/transactions`, `/api/inbox`.
-- ❌ No month / date-range selector. Dashboard always shows the same fixed window.
-- ❌ Backend `/agg/weekly` doesn't accept `date_from` / `date_to` params (`grep` returns no hits).
-- ❌ No goal widget (depends on V1).
-- ❌ No top-merchants widget.
+**✅ DONE 2026-06-07** — PR #52 merged (commit `d6730d5`, squash `f2c4146`). Aidin rebuilt the dashboard. Three demo-blockers caught in post-merge review + fixed inline; no separate follow-up PR needed.
 
-**Scope (minimum for "real finance app" feel):**
-- Month selector dropdown at top of dashboard ("June 2026 ▾"). Pipes a `date_from` + `date_to` into the 3 dashboard fetches.
-- Backend: add `?month=YYYY-MM` optional param to `/agg/weekly` and `/transactions`. Backwards-compatible (default = current behavior).
-- New "top merchants" widget — group by `merchant_canonical`, sum, show top 5. Reuses existing `/transactions` data.
-- Goal widget — depends on V1.
+**What shipped (PR #52):**
+- NEW [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) (~550 lines) — 11 widgets: `KpiRow`, `InsightsPanel`, `TrendChart`, `BudgetProgress`, `CategoryBreakdown`, `IncomeExpenses`, `UpcomingBills`, `SavingsGoals`, `LargestPurchases`, `DashboardFilters`, plus `CARD` constant + `Panel`/`Kpi`/`Bar`/`DemoTag` primitives. Replaces the deleted [`spend-chart.tsx`](frontend/components/dashboard/spend-chart.tsx), [`category-breakdown.tsx`](frontend/components/dashboard/category-breakdown.tsx), [`stat-cards.tsx`](frontend/components/dashboard/stat-cards.tsx).
+- NEW [`frontend/lib/analytics.ts`](frontend/lib/analytics.ts) (~222 lines) — client-side aggregation over raw transactions: `buildBuckets` (week/month + category filter), `rankCategories`, `pctChange`, `savingsRate`, `largestPurchases`, `deriveInsights`. Avoided the backend `?month=` route work entirely by aggregating in the frontend (single `getTransactions(500)` call feeds everything reactively). Trade-off documented in [`analytics.ts:1-3`](frontend/lib/analytics.ts#L1-L3).
+- NEW [`frontend/lib/demo.ts`](frontend/lib/demo.ts) — placeholder net worth / cash / budgets / goals / bills for widgets that have no backend yet. Each tagged with a visible "SAMPLE" pill (amber, see DemoTag fix below).
+- Rebuilt [`frontend/app/dashboard/page.tsx`](frontend/app/dashboard/page.tsx) with `DashboardFilters` (week/month granularity + period picker + category dropdown) wired reactively across every widget.
+- Chat polish in same PR: redesigned suggestion cards with icons (Sparkles/TrendingUp/PieChart/PiggyBank), `AppShell glow={false}` for chat page, plain background. Multi-turn wire (V3) intact.
 
-**Files to touch:** `frontend/app/dashboard/page.tsx` (selector state + plumb date range), `frontend/components/dashboard/month-selector.tsx` (NEW), `frontend/components/dashboard/top-merchants.tsx` (NEW), `backend/app/api/agg.py` + `backend/app/api/transactions.py` (add optional month param), `backend/app/aggregations/weekly.py` (accept date range).
+**Post-merge fixes (3 demo-blockers caught in review, all confirmed real against shipped code, fixed in same branch):**
 
-**Effort:** 3-5h for @aidin (frontend) + 1-2h for @mahyar (backend month param).
-**Owner:** @aidin frontend, @mahyar backend
-**Demo value:** HIGH — single biggest visual upgrade. Makes the demo URL look like a shipped product.
-**Risk:** MEDIUM — month param changes touch live endpoints. Keep defaults backwards-compatible; smoke-test before video.
-**AC:**
-- [ ] Selector defaults to current month, lets user pick any month with transactions.
-- [ ] All 4 widgets (StatCards, SpendChart, CategoryBreakdown, TransactionsList) respect the selection.
-- [ ] Empty months render an empty state, not a crash.
-- [ ] Top-merchants widget shows 5 merchants with $ totals.
+1. **Projection insight on stale month** — [`frontend/lib/analytics.ts:198-213`](frontend/lib/analytics.ts#L198-L213). `deriveInsights` computed "At this pace you'll spend about $X this month" against `months[months.length-1]` (latest bucket WITH data = May for u_482, synthetic data ends 2026-05-24) using today's clock (Jun 7). Formula `(may_spend / 7 days) * 30 days` would have rendered "$~14k this month" on camera. **Fix:** gate the projection so it only fires when `curr.key === currentKey` (computed from `now.getUTCFullYear() / getUTCMonth()`). Folded in PM's off-by-one fix (`new Date(yr, mo, 0)` → `Date.UTC(yr, mo, 0)`) while in the function. 3-line gate, 2-line UTC fix.
 
-**Recommendation:** **ship-must** — Aidin's already on this lane.
+2. **DemoTag invisibility** — [`frontend/components/dashboard/widgets.tsx:37-46`](frontend/components/dashboard/widgets.tsx#L37-L46). Pre-fix: `text-[9px]`, `border-white/10`, `bg-white/[0.04]`, `text-fg-muted` — invisible at 1080p video compression. Judge would see "$82,400 Net worth" headline next to real spend KPIs and conclude the app is Plaid-linked, contradicting the MongoDB-track pitch ("CSV ingest, no bank linking"). **Fix:** bump to `text-[11px]` + `border-amber-300/40` + `bg-amber-400/15` + `text-amber-300` (matches the warn tone already used in InsightsPanel). Renamed pill text "demo" → "SAMPLE" — reads as placeholder more clearly than "demo" on a finance app.
+
+3. **Category filter zeros income** — [`frontend/lib/analytics.ts:54-83`](frontend/lib/analytics.ts#L54-L83). `buildBuckets` applied `categoryFilter` BEFORE the inflow/outflow split, so picking category=food (or any spend category) dropped the salary transaction → `bucket.income = 0` → IncomeExpenses chart loses green bars → savings-rate KPI shows "n/a". Live the moment you click a category filter on camera. **Fix:** apply categoryFilter only to outflows (`!isInflow`). Inflows always counted regardless of category filter. 4-line patch.
+
+**Files touched in post-merge fix:** [`frontend/lib/analytics.ts`](frontend/lib/analytics.ts) (+24/-7), [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) (+8/-2).
+
+**Test results:**
+- `pnpm exec tsc --noEmit` — clean
+- Visual smoke (eye-test on dev server): category=food no longer zeros IncomeExpenses; SAMPLE pill visible at video distance; InsightsPanel no longer renders the "$14k this month" projection against May data.
+
+**Deferred to post-freeze (won't fire on the canonical demo script, not worth touching tonight):**
+- selectedKey not reset on category change (page.tsx:78) — only bites if user filters into a category with zero spend in the selected period.
+- `prev` is "previous bucket" not "previous calendar period" — mislabels deltas across data gaps. Synthetic data is continuous May→present so won't trigger.
+- Several useMemo dep tightening + dead exports (`topLevelSpend`, `savingsRate`, etc.). Bench-warmers.
+- Process violation: PR branch `dashboard-chat-polish` had no area prefix or ticket ref. Accepted under freeze pressure.
+
+**Owner:** @aidin (PR #52) + @mahyar (post-merge fixes)
+**Recommendation:** SHIPPED — closes V2. Dashboard now passes the "real finance app" bar for the demo video.
 
 ---
 
