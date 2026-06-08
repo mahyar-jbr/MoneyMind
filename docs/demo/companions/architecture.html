@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MoneyMind · Architecture — demo companion</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          bg: '#09090b',
+          surface: '#18181b',
+          surface2: '#1f1f23',
+          border: '#27272a',
+          borderHi: '#3f3f46',
+          mute: '#71717a',
+          muteHi: '#a1a1aa',
+          ink: '#e4e4e7',
+          inkHi: '#fafafa',
+          em: '#34d399',
+          emDim: '#10b981',
+          emDeep: '#064e3b',
+          voyage: '#a78bfa',
+          mongo: '#00ed64',
+          warn: '#fbbf24',
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  body {
+    background: #09090b;
+    color: #e4e4e7;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Background atmosphere */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 12% 8%, rgba(52,211,153,0.07), transparent 60%),
+      radial-gradient(800px 600px at 88% 92%, rgba(52,211,153,0.04), transparent 60%);
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  /* Custom CSS for animation states + connector dash */
+  .node {
+    transition: all 600ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0.28;
+    transform: translateY(8px);
+  }
+  .node.active {
+    opacity: 1;
+    transform: translateY(0);
+    border-color: #10b981 !important;
+    box-shadow:
+      0 0 0 1px rgba(52,211,153,0.22),
+      0 8px 32px -8px rgba(52,211,153,0.28),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .badge {
+    opacity: 0;
+    transition: opacity 400ms ease 700ms;
+  }
+  .node.active .badge { opacity: 1; }
+
+  .tool-pill {
+    transition: all 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  .tool-pill.lit {
+    opacity: 1;
+    transform: scale(1);
+    color: #34d399 !important;
+    border-color: #10b981 !important;
+    background: rgba(52,211,153,0.08) !important;
+  }
+
+  .atlas-row {
+    opacity: 0;
+    transition: opacity 400ms ease;
+  }
+  .atlas-row.lit { opacity: 1; }
+
+  /* Inline arrow between flex items — pure CSS, no SVG.
+     The dot row + arrowhead live in a small flex item between each
+     layer column. `margin-top` aligns the arrow with the vertical
+     midline of the SMALL nodes (Browser/Vercel/FastAPI). The Agent
+     and Atlas nodes are taller; the arrow points to their upper
+     third which still reads as "into the node" visually.
+     Layer label = ~14px + gap-3 (12px) + half of node body (~38px). */
+  .conn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 32px;
+    flex-shrink: 0;
+    margin-top: 60px;
+  }
+  .conn .seg {
+    height: 2px;
+    background: #52525b;
+    flex: 1;
+    transition: background 400ms ease;
+    border-radius: 1px;
+  }
+  .conn .head {
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 7px solid #52525b;
+    transition: border-left-color 400ms ease;
+  }
+  .conn.active .seg {
+    background: #34d399;
+    box-shadow: 0 0 6px rgba(52,211,153,0.7);
+  }
+  .conn.active .head {
+    border-left-color: #34d399;
+    filter: drop-shadow(0 0 4px rgba(52,211,153,0.7));
+  }
+  .conn .dots {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .conn .dot {
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: #52525b;
+    opacity: 0;
+    transition: all 200ms ease;
+  }
+  .conn.active .dot {
+    background: #34d399;
+    opacity: 1;
+  }
+  .conn.active .dot:nth-child(1) { animation: pulse 1.2s ease-in-out infinite; }
+  .conn.active .dot:nth-child(2) { animation: pulse 1.2s ease-in-out infinite 0.4s; }
+  .conn.active .dot:nth-child(3) { animation: pulse 1.2s ease-in-out infinite 0.8s; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.6); opacity: 1; }
+  }
+
+  .callout {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 600ms ease;
+  }
+  .callout.lit {
+    opacity: 1;
+    transform: translateY(0);
+    border-color: #10b981 !important;
+  }
+
+  .hint { opacity: 0; transition: opacity 200ms ease; }
+  body:hover .hint { opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div class="relative h-screen w-screen px-20 py-14 flex flex-col z-10">
+
+  <!-- Header bar -->
+  <div class="flex justify-between items-center mb-6">
+    <div class="font-bold text-lg tracking-tight text-inkHi">
+      Money<span class="text-em">Mind</span>
+    </div>
+    <div class="font-mono text-xs text-muteHi bg-white/[0.04] border border-border px-3 py-1.5 rounded-full uppercase tracking-wider">
+      Architecture · live request flow
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold tracking-tight text-inkHi mb-1">One request, end-to-end.</h1>
+    <p class="text-sm text-muteHi">Browser → Vercel → FastAPI → LangGraph → Atlas. Eighteen tools, one cluster.</p>
+  </div>
+
+  <!-- Diagram: nodes + inline arrow connectors.
+       items-start so the arrows can be vertically positioned by their
+       own margin-top, aligned to node midlines. -->
+  <div id="diagram" class="flex-1 flex items-start justify-between gap-2 pt-4">
+
+    <!-- Browser -->
+    <div class="flex flex-col items-center gap-3 flex-1 min-w-0">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest">Layer 1 · UI</div>
+      <div id="node-browser"
+           class="node relative bg-surface border border-border rounded-2xl px-5 py-4 text-center w-full max-w-[200px]">
+        <div class="font-semibold text-sm text-inkHi mb-1">Browser</div>
+        <div class="font-mono text-[10px] text-muteHi">Next.js 15 · Tailwind</div>
+        <div class="badge absolute -top-2 -right-2 bg-em text-emerald-950 font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full">
+          Clerk JWT
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 1 -->
+    <div class="conn" data-conn="0">
+      <span class="seg"></span>
+      <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      <span class="seg"></span>
+      <span class="head"></span>
+    </div>
+
+    <!-- Vercel -->
+    <div class="flex flex-col items-center gap-3 flex-1 min-w-0">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest">Layer 2 · Edge</div>
+      <div id="node-vercel"
+           class="node relative bg-surface border border-border rounded-2xl px-5 py-4 text-center w-full max-w-[200px]">
+        <div class="font-semibold text-sm text-inkHi mb-1">Vercel</div>
+        <div class="font-mono text-[10px] text-muteHi">/api/chat · SSE</div>
+        <div class="badge absolute -top-2 -right-2 bg-em text-emerald-950 font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full">
+          auth verify
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 2 -->
+    <div class="conn" data-conn="1">
+      <span class="seg"></span>
+      <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      <span class="seg"></span>
+      <span class="head"></span>
+    </div>
+
+    <!-- FastAPI -->
+    <div class="flex flex-col items-center gap-3 flex-1 min-w-0">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest">Layer 3 · Backend</div>
+      <div id="node-fastapi"
+           class="node relative bg-surface border border-border rounded-2xl px-5 py-4 text-center w-full max-w-[200px]">
+        <div class="font-semibold text-sm text-inkHi mb-1">FastAPI</div>
+        <div class="font-mono text-[10px] text-muteHi">Python · motor · Railway</div>
+        <div class="badge absolute -top-2 -right-2 bg-em text-emerald-950 font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full">
+          loopback
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 3 -->
+    <div class="conn" data-conn="2">
+      <span class="seg"></span>
+      <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      <span class="seg"></span>
+      <span class="head"></span>
+    </div>
+
+    <!-- Agent (wider — holds the 18 tool pills) -->
+    <div class="flex flex-col items-center gap-3 flex-[1.5] min-w-0">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest">Layer 4 · Reasoning</div>
+      <div id="node-agent"
+           class="node relative bg-surface border border-border rounded-2xl px-4 py-4 text-center w-full max-w-[280px]">
+        <div class="font-semibold text-sm text-inkHi mb-1">LangGraph Agent</div>
+        <div class="font-mono text-[10px] text-muteHi mb-3">Gemini 2.5 Flash · Vertex AI</div>
+        <div class="badge absolute -top-2 -right-2 bg-em text-emerald-950 font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full">
+          18 tools
+        </div>
+        <div id="tools" class="grid grid-cols-3 gap-1 mt-2">
+          <!-- populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow 4 -->
+    <div class="conn" data-conn="3">
+      <span class="seg"></span>
+      <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      <span class="seg"></span>
+      <span class="head"></span>
+    </div>
+
+    <!-- Atlas -->
+    <div class="flex flex-col items-center gap-3 flex-[1.3] min-w-0">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest">Layer 5 · Data</div>
+      <div id="node-atlas"
+           class="node relative bg-surface border border-border rounded-2xl px-4 py-4 text-center w-full max-w-[240px]">
+        <div class="font-semibold text-sm text-inkHi mb-1">MongoDB Atlas</div>
+        <div class="font-mono text-[10px] text-muteHi mb-3">one cluster · four jobs</div>
+        <div class="badge absolute -top-2 -right-2 bg-em text-emerald-950 font-mono text-[9px] font-semibold px-2 py-0.5 rounded-full">
+          + MCP
+        </div>
+        <div class="flex flex-col gap-1.5 mt-2 text-left">
+          <div class="atlas-row flex items-center gap-2 font-mono text-[10px] text-muteHi" data-row="ledger">
+            <span class="w-1.5 h-1.5 rounded-full bg-em shrink-0"></span>
+            <span>Operational ledger</span>
+          </div>
+          <div class="atlas-row flex items-center gap-2 font-mono text-[10px] text-muteHi" data-row="memory">
+            <span class="w-1.5 h-1.5 rounded-full bg-voyage shrink-0"></span>
+            <span>Vector memory · Voyage 1024-d</span>
+          </div>
+          <div class="atlas-row flex items-center gap-2 font-mono text-[10px] text-muteHi" data-row="state">
+            <span class="w-1.5 h-1.5 rounded-full bg-mongo shrink-0"></span>
+            <span>LangGraph state</span>
+          </div>
+          <div class="atlas-row flex items-center gap-2 font-mono text-[10px] text-muteHi" data-row="mcp">
+            <span class="w-1.5 h-1.5 rounded-full bg-warn shrink-0"></span>
+            <span>MCP read tools</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom callout strip -->
+  <div id="callout"
+       class="callout mt-8 bg-surface border border-border rounded-2xl px-6 py-4 flex justify-between items-center">
+    <div class="font-mono text-xs text-muteHi tracking-wide">
+      <span class="text-em font-semibold">Single event loop</span> end-to-end · motor cursors never cross boundaries · async-clean Clerk to Atlas
+    </div>
+    <div class="font-mono text-xs text-em">~3s warm · &lt;8s cold</div>
+  </div>
+</div>
+
+<div class="hint fixed bottom-4 right-4 font-mono text-[10px] text-mute">
+  Press R to restart · 16s animation
+</div>
+
+<script>
+  // 18 tools as short labels (rendered into 3-col grid inside the Agent node).
+  // Labels are 12-14 chars max so they fit at text-[8px] without truncation
+  // in a 280px-wide 3-column grid.
+  const TOOLS = [
+    'recall_mem',     'write_mem',      'forget_mem',
+    'write_goal',     'list_goals',     'abandon_goal',
+    'set_budget',     'list_budgets',   'abandon_budg',
+    'propose_int',    'respond_int',    'log_outcome',
+    'check_pace',     'spend_anom',     'query_txns',
+    'sum_week',       'update_ctx',     'remind_me',
+  ];
+
+  // Render tool pills
+  const toolsContainer = document.getElementById('tools');
+  TOOLS.forEach((name, i) => {
+    const el = document.createElement('div');
+    el.className = 'tool-pill font-mono text-[8.5px] text-mute bg-white/[0.02] border border-white/[0.05] rounded-md px-1 py-1 text-center whitespace-nowrap';
+    el.dataset.idx = i;
+    el.textContent = name;
+    toolsContainer.appendChild(el);
+  });
+
+  function activateConnector(i) {
+    const conn = document.querySelector(`.conn[data-conn="${i}"]`);
+    if (conn) conn.classList.add('active');
+  }
+
+  function play() {
+    // Reset
+    document.querySelectorAll('.node, .tool-pill, .atlas-row, .callout, .conn')
+      .forEach(el => el.classList.remove('active', 'lit'));
+
+    // T=0.2s: Browser
+    setTimeout(() => document.getElementById('node-browser').classList.add('active'), 200);
+
+    // T=1.5s: Vercel + connector 1
+    setTimeout(() => {
+      document.getElementById('node-vercel').classList.add('active');
+      activateConnector(0);
+    }, 1500);
+
+    // T=3.0s: FastAPI + connector 2
+    setTimeout(() => {
+      document.getElementById('node-fastapi').classList.add('active');
+      activateConnector(1);
+    }, 3000);
+
+    // T=4.5s: Agent + connector 3
+    setTimeout(() => {
+      document.getElementById('node-agent').classList.add('active');
+      activateConnector(2);
+    }, 4500);
+
+    // T=5.5s onward: light up tools in groups of 3 (faster cadence)
+    for (let i = 0; i < TOOLS.length; i++) {
+      setTimeout(() => {
+        const pill = toolsContainer.querySelector(`[data-idx="${i}"]`);
+        if (pill) pill.classList.add('lit');
+      }, 5500 + Math.floor(i / 3) * 500 + (i % 3) * 100);
+    }
+
+    // T=9.5s: Atlas + connector 4
+    setTimeout(() => {
+      document.getElementById('node-atlas').classList.add('active');
+      activateConnector(3);
+    }, 9500);
+
+    // T=10.5s: light up Atlas rows
+    ['ledger', 'memory', 'state', 'mcp'].forEach((row, i) => {
+      setTimeout(() => {
+        document.querySelector(`.atlas-row[data-row="${row}"]`).classList.add('lit');
+      }, 10500 + i * 350);
+    });
+
+    // T=13s: callout
+    setTimeout(() => document.getElementById('callout').classList.add('lit'), 13000);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') play();
+  });
+
+  window.addEventListener('load', () => setTimeout(play, 400));
+</script>
+</body>
+</html>

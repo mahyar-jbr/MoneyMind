@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MoneyMind · Memory Loop — demo companion (optional)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          bg: '#09090b', surface: '#18181b', surface2: '#1f1f23',
+          border: '#27272a',
+          mute: '#71717a', muteHi: '#a1a1aa',
+          ink: '#e4e4e7', inkHi: '#fafafa',
+          em: '#34d399', emDim: '#10b981',
+          voyage: '#a78bfa',
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  body {
+    background: #09090b;
+    color: #e4e4e7;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 12% 8%, rgba(52,211,153,0.06), transparent 60%),
+      radial-gradient(800px 600px at 88% 92%, rgba(167,139,250,0.05), transparent 60%);
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .bubble-l, .bubble-r, .doc, .agent-bubble, .flow-label, .footer-line, .atlas-col {
+    transition: all 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .bubble-l { opacity: 0; transform: translateX(-12px); }
+  .bubble-l.lit { opacity: 1; transform: translateX(0); }
+
+  .bubble-r { opacity: 0; transform: translateX(12px); }
+  .bubble-r.lit { opacity: 1; transform: translateX(0); }
+
+  .doc { opacity: 0; transform: scale(0.97); }
+  .doc.lit { opacity: 1; transform: scale(1); }
+
+  .agent-bubble { opacity: 0; transform: translateX(12px); }
+  .agent-bubble.lit { opacity: 1; transform: translateX(0); }
+
+  .flow-label { opacity: 0; }
+  .flow-label.lit { opacity: 1; }
+
+  .atlas-col {
+    box-shadow:
+      0 0 0 1px rgba(52,211,153,0),
+      0 12px 32px -12px rgba(52,211,153,0),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .atlas-col.lit {
+    box-shadow:
+      0 0 0 1px rgba(52,211,153,0.3),
+      0 12px 32px -12px rgba(52,211,153,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .footer-line { opacity: 0; transition: opacity 600ms ease; }
+  .footer-line.lit { opacity: 1; }
+
+  .hint { opacity: 0; transition: opacity 200ms ease; }
+  body:hover .hint { opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div class="relative z-10 h-screen w-screen px-16 py-12 flex flex-col">
+
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-4">
+    <div class="font-bold text-lg tracking-tight text-inkHi">
+      Money<span class="text-em">Mind</span>
+    </div>
+    <div class="font-mono text-xs text-muteHi bg-white/[0.04] border border-border px-3 py-1.5 rounded-full uppercase tracking-wider">
+      Memory loop · the slide-8 thesis
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div class="mb-6">
+    <h1 class="text-[26px] font-bold tracking-tight text-inkHi mb-1.5">One conversation. Two timestamps. The agent remembers.</h1>
+    <p class="text-[13px] text-muteHi">Voyage embeddings, MongoDB Atlas vector index, 1024-d cosine — the agent decides when to write and when to recall.</p>
+  </div>
+
+  <!-- Three-column scene -->
+  <div class="flex-1 grid grid-cols-[1fr_1.2fr_1fr] gap-7 items-stretch">
+
+    <!-- USER COLUMN -->
+    <div class="relative bg-surface border border-border rounded-2xl p-5 flex flex-col">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest mb-4">
+        User · patterns nobody else captures
+      </div>
+
+      <div id="b-day1" class="bubble-l bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-3 mb-3">
+        <div class="font-mono text-[10px] text-mute mb-1.5 uppercase tracking-wider">May 4 · 2:14 pm</div>
+        <div class="text-sm text-ink leading-snug">I'm bulking this month so I'm eating more — keep that in mind.</div>
+      </div>
+
+      <div id="b-day30" class="bubble-l bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-3">
+        <div class="font-mono text-[10px] text-mute mb-1.5 uppercase tracking-wider">May 31 · 9:02 am</div>
+        <div class="text-sm text-ink leading-snug">How was my food spend this month?</div>
+      </div>
+    </div>
+
+    <!-- ATLAS COLUMN -->
+    <div id="atlas-col" class="atlas-col relative bg-gradient-to-b from-surface2 to-surface border border-emDim rounded-2xl p-5 flex flex-col">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest mb-4">
+        MongoDB Atlas · memories collection
+      </div>
+
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2 h-2 rounded-full bg-em"></div>
+        <div class="font-mono text-xs text-inkHi font-medium">db.memories.insertOne</div>
+      </div>
+
+      <div id="doc" class="doc bg-black/30 border border-border rounded-xl p-4 font-mono text-[11px] leading-[1.7] text-muteHi flex-1">
+{<br>
+&nbsp;&nbsp;<span class="text-em">user_id</span>: <span class="text-amber-400">"user_3Ee..."</span>,<br>
+&nbsp;&nbsp;<span class="text-em">type</span>: <span class="text-amber-400">"preference"</span>,<br>
+&nbsp;&nbsp;<span class="text-em">tag</span>: <span class="text-amber-400">"bulking_month"</span>,<br>
+&nbsp;&nbsp;<span class="text-em">summary</span>: <span class="text-amber-400">"User is bulking — food spend will be elevated"</span>,<br>
+&nbsp;&nbsp;<span class="text-em">confidence</span>: <span class="text-blue-400">0.92</span>,<br>
+&nbsp;&nbsp;<span class="text-em">embedding</span>: [<span class="text-voyage">1024 dims · voyage-3</span>],<br>
+&nbsp;&nbsp;<span class="text-em">created_at</span>: <span class="text-amber-400">"2026-05-04T18:14:33Z"</span>,<br>
+&nbsp;&nbsp;<span class="text-em">use_count</span>: <span class="text-blue-400">0</span>,<br>
+&nbsp;&nbsp;<span class="text-em">deleted_at</span>: <span class="text-mute">null</span><br>
+}
+      </div>
+
+      <div class="flex justify-between mt-3 font-mono text-[10px] uppercase tracking-widest">
+        <div id="flow-1" class="flow-label text-em">← write_memory</div>
+        <div id="flow-2" class="flow-label text-em">recall_memory →</div>
+      </div>
+    </div>
+
+    <!-- AGENT COLUMN -->
+    <div class="relative bg-surface border border-border rounded-2xl p-5 flex flex-col">
+      <div class="font-mono text-[10px] text-mute uppercase tracking-widest mb-4">
+        Agent · 27 days later
+      </div>
+
+      <div id="agent" class="agent-bubble bg-em/[0.06] border border-em/30 rounded-xl px-4 py-4 text-[13px] leading-[1.55] text-ink mt-auto">
+        "You spent <span class="text-em font-medium">$847 on food</span> this month, which is higher than your usual ~$520. <span class="text-em font-medium">But that tracks — you mentioned at the start of the month you were bulking</span>, so the elevated food spend is expected. Worth keeping an eye on the delivery line ($340 of that 847) once the bulking phase ends."
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div id="footer" class="footer-line mt-7 text-center font-mono text-xs text-muteHi">
+    <span class="text-em font-semibold">27 days. Zero re-prompting. One Atlas query.</span> · This is the product.
+  </div>
+</div>
+
+<div class="hint fixed bottom-4 right-4 font-mono text-[10px] text-mute">
+  Press R to restart · 14s animation
+</div>
+
+<script>
+  function play() {
+    document.querySelectorAll('.bubble-l, .bubble-r, .doc, .agent-bubble, .flow-label, .footer-line, .atlas-col')
+      .forEach(el => el.classList.remove('lit'));
+
+    // T=0.3s: Day-1 user bubble
+    setTimeout(() => document.getElementById('b-day1').classList.add('lit'), 300);
+
+    // T=1.5s: flow-1 ("← write_memory") + atlas glow
+    setTimeout(() => document.getElementById('flow-1').classList.add('lit'), 1500);
+    setTimeout(() => document.getElementById('atlas-col').classList.add('lit'), 1800);
+
+    // T=2.5s: memory document fades in
+    setTimeout(() => document.getElementById('doc').classList.add('lit'), 2500);
+
+    // T=5.5s: Day-30 user bubble (the question)
+    setTimeout(() => document.getElementById('b-day30').classList.add('lit'), 5500);
+
+    // T=7s: flow-2 ("recall_memory →")
+    setTimeout(() => document.getElementById('flow-2').classList.add('lit'), 7000);
+
+    // T=7.5s: agent reply
+    setTimeout(() => document.getElementById('agent').classList.add('lit'), 7500);
+
+    // T=12s: footer
+    setTimeout(() => document.getElementById('footer').classList.add('lit'), 12000);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') play();
+  });
+
+  window.addEventListener('load', () => setTimeout(play, 400));
+</script>
+</body>
+</html>

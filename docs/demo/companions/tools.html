@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MoneyMind · 18 Tools — demo companion</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          bg: '#09090b', surface: '#18181b', border: '#27272a',
+          mute: '#71717a', muteHi: '#a1a1aa',
+          ink: '#e4e4e7', inkHi: '#fafafa',
+          em: '#34d399', emDim: '#10b981',
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  body {
+    background: #09090b;
+    color: #e4e4e7;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 12% 8%, rgba(52,211,153,0.06), transparent 60%),
+      radial-gradient(800px 600px at 88% 92%, rgba(52,211,153,0.04), transparent 60%);
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .group-card {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: all 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .group-card.lit {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Per-group glow when lit. Color is set inline via group's data-color. */
+  .group-card.lit { box-shadow: var(--glow); border-color: var(--ring-color); }
+
+  .tool {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: all 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tool.lit {
+    opacity: 1;
+    transform: translateY(0);
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.08);
+  }
+
+  .footer-strip {
+    opacity: 0;
+    transition: all 600ms ease;
+  }
+  .footer-strip.lit {
+    opacity: 1;
+    border-color: #10b981 !important;
+  }
+
+  .hint { opacity: 0; transition: opacity 200ms ease; }
+  body:hover .hint { opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<div class="relative z-10 h-screen w-screen px-20 py-14 flex flex-col">
+
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-5">
+    <div class="font-bold text-lg tracking-tight text-inkHi">
+      Money<span class="text-em">Mind</span>
+    </div>
+    <div class="font-mono text-xs text-muteHi bg-white/[0.04] border border-border px-3 py-1.5 rounded-full uppercase tracking-wider">
+      18 native tools · LangGraph ReAct
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold tracking-tight text-inkHi mb-1">
+      <span class="text-em font-mono font-semibold">18</span> tools. The agent decides when to use each one.
+    </h1>
+    <p class="text-sm text-muteHi">Grouped by feature. Each is a Python function with a Pydantic schema, bound to the LangGraph loop.</p>
+  </div>
+
+  <!-- Groups grid: 3 columns x 2 rows -->
+  <div id="groups" class="flex-1 grid grid-cols-3 grid-rows-2 gap-4 content-start">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- Footer -->
+  <div id="footer"
+       class="footer-strip mt-5 bg-surface border border-border rounded-2xl px-6 py-3.5 flex justify-between items-center">
+    <div class="font-mono text-xs text-muteHi">
+      All hermetic-tested · <span class="text-em font-semibold">94/94</span> backend · <span class="text-em font-semibold">222</span>+ agent
+    </div>
+    <div class="font-mono text-xs text-muteHi">
+      <span class="text-em font-semibold">+</span> MongoDB MCP Server read tools
+    </div>
+  </div>
+</div>
+
+<div class="hint fixed bottom-4 right-4 font-mono text-[10px] text-mute">
+  Press R to restart · 12s animation
+</div>
+
+<script>
+  // Group definitions. Each color is the Tailwind class for the dot + the rgba glow.
+  const GROUPS = [
+    {
+      key: 'memory', title: 'Memory', dotClass: 'bg-emerald-400',
+      glowColor: 'rgba(52,211,153,0.25)', ringColor: 'rgba(52,211,153,0.4)',
+      tools: [
+        { name: 'recall_memory', desc: 'Vector search over Voyage-embedded memories. The agent calls this to remember.' },
+        { name: 'write_memory', desc: 'Insert a new memory with inline Voyage embedding. The agent decides when.' },
+        { name: 'forget_memory', desc: 'Soft-delete by query. Confidence-gated, single-turn confirmation.' },
+      ]
+    },
+    {
+      key: 'goals', title: 'Goals', dotClass: 'bg-blue-400',
+      glowColor: 'rgba(96,165,250,0.25)', ringColor: 'rgba(96,165,250,0.4)',
+      tools: [
+        { name: 'write_goal', desc: 'Persist a savings target with target_date + current_amount.' },
+        { name: 'list_goals', desc: 'Read active goals so the agent can discover goal_ids.' },
+        { name: 'abandon_goal', desc: 'Status flip (active → abandoned). Stays in Atlas for audit.' },
+        { name: 'check_goal_pace', desc: '8-verdict ladder: ahead / on_track / behind / past_due / …' },
+      ]
+    },
+    {
+      key: 'budgets', title: 'Budgets', dotClass: 'bg-amber-400',
+      glowColor: 'rgba(251,191,36,0.25)', ringColor: 'rgba(251,191,36,0.4)',
+      tools: [
+        { name: 'set_budget', desc: 'Upsert per-category cap. One active budget per (user, category).' },
+        { name: 'list_budgets', desc: 'Read active caps for spend assessments.' },
+        { name: 'abandon_budget', desc: 'Status flip with 3 call paths: query, category, or budget_id.' },
+      ]
+    },
+    {
+      key: 'interventions', title: 'Interventions', dotClass: 'bg-pink-400',
+      glowColor: 'rgba(244,114,182,0.25)', ringColor: 'rgba(244,114,182,0.4)',
+      tools: [
+        { name: 'propose_intervention', desc: 'Write a PENDING nudge. Surfaces as a chat-thread card.' },
+        { name: 'respond_to_intervention', desc: 'Accept / decline / modify. Cap accepts auto-materialize a budget.' },
+        { name: 'log_outcome', desc: 'Server-computed delta_pct. Before/after. Closes the learning loop.' },
+      ]
+    },
+    {
+      key: 'analytics', title: 'Analytics', dotClass: 'bg-purple-400',
+      glowColor: 'rgba(167,139,250,0.25)', ringColor: 'rgba(167,139,250,0.4)',
+      tools: [
+        { name: 'query_transactions', desc: 'Filter rows by category, date range, amount.' },
+        { name: 'get_spend_anomaly', desc: 'Z-score over a category window. Triggers interventions.' },
+        { name: 'summarize_week', desc: 'Ledger + goals composite. Inbox-ready paragraph.' },
+      ]
+    },
+    {
+      key: 'housekeeping', title: 'Context & Crons', dotClass: 'bg-slate-400',
+      glowColor: 'rgba(148,163,184,0.25)', ringColor: 'rgba(148,163,184,0.4)',
+      tools: [
+        { name: 'update_user_context', desc: 'Insert-only stream of life-context. Active-on-date predicate.' },
+        { name: 'schedule_reminder', desc: 'Write a one-off scheduled ping. UTC-aware fires_at.' },
+      ]
+    },
+  ];
+
+  // Render groups
+  const groupsEl = document.getElementById('groups');
+  GROUPS.forEach((g, gi) => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'group-card bg-surface border border-border rounded-2xl p-4 flex flex-col min-w-0';
+    groupEl.dataset.idx = gi;
+    groupEl.style.setProperty('--glow', `0 0 0 1px ${g.glowColor}, 0 8px 24px -8px ${g.glowColor}`);
+    groupEl.style.setProperty('--ring-color', g.ringColor);
+
+    groupEl.innerHTML = `
+      <div class="flex items-center gap-2.5 mb-3 pb-2.5 border-b border-border">
+        <div class="w-2 h-2 rounded-full ${g.dotClass} shrink-0"></div>
+        <div class="font-mono text-[11px] uppercase tracking-wider text-inkHi">${g.title}</div>
+        <div class="ml-auto font-mono text-[10px] text-mute">${g.tools.length} tool${g.tools.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="flex flex-col gap-1.5 flex-1">
+        ${g.tools.map((t, ti) => `
+          <div class="tool bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-2 min-w-0"
+               data-gi="${gi}" data-ti="${ti}">
+            <div class="font-mono text-[11px] text-inkHi font-medium truncate">${t.name}</div>
+            <div class="text-[10px] text-muteHi mt-0.5 leading-snug">${t.desc}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    groupsEl.appendChild(groupEl);
+  });
+
+  function play() {
+    document.querySelectorAll('.group-card, .tool, .footer-strip')
+      .forEach(el => el.classList.remove('lit'));
+
+    // T=0.2s: 6 groups stagger in
+    GROUPS.forEach((g, gi) => {
+      setTimeout(() => {
+        document.querySelector(`.group-card[data-idx="${gi}"]`).classList.add('lit');
+      }, 200 + gi * 180);
+    });
+
+    // T=1.4s: tools light up per-group with stagger
+    GROUPS.forEach((g, gi) => {
+      g.tools.forEach((_, ti) => {
+        setTimeout(() => {
+          const el = document.querySelector(`.tool[data-gi="${gi}"][data-ti="${ti}"]`);
+          if (el) el.classList.add('lit');
+        }, 1400 + gi * 180 + ti * 200);
+      });
+    });
+
+    // T=10s: footer
+    setTimeout(() => document.getElementById('footer').classList.add('lit'), 10000);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') play();
+  });
+
+  window.addEventListener('load', () => setTimeout(play, 400));
+</script>
+</body>
+</html>
