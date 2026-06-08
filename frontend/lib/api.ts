@@ -1,5 +1,4 @@
 import type {
-  WeeklyResponse,
   TransactionsResponse,
   InboxResponse,
   GoalsResponse,
@@ -8,11 +7,6 @@ import type {
 } from "./types";
 
 // these hit our own /api proxy routes, which add auth and call the backend
-export async function getWeekly(signal?: AbortSignal): Promise<WeeklyResponse> {
-  const res = await fetch("/api/agg/weekly", { signal });
-  if (!res.ok) throw new Error(`weekly failed: ${res.status}`);
-  return res.json();
-}
 
 export async function getTransactions(
   limit = 25,

@@ -41,7 +41,11 @@ User-stated targets.
   target_date: ISODate("2026-12-31"),
   pace_check: "weekly",
   status: "active",       // active | paused | complete | abandoned
-  created_at: ISODate(...)
+  created_at: ISODate(...),
+  abandoned_at: null      // null while active; set to UTC datetime by abandon_goal
+                          // when status flips to "abandoned". Never deleted — status flip only,
+                          // so the agent retains the history ("you abandoned the gym-budget goal
+                          // back in March").
 }
 ```
 
@@ -98,11 +102,40 @@ Patterns the agent discovers. **This is the magic collection.**
   embedding: [/* 1024 dims; written explicitly on insert via Voyage (voyage-3), not auto-embed */],
   created_at: ISODate(...),
   last_used: ISODate(...),
-  use_count: 3
+  use_count: 3,
+  deleted_at: null                      // V3 soft-delete. null while active; set to UTC datetime
+                                        // by forget_memory when the user asks the agent to forget.
+                                        // recall_memory filters out docs where deleted_at != null
+                                        // so soft-deleted memories never surface in vector recall.
+                                        // We never hard-delete — keeps the agent honest about what
+                                        // it once knew, and forgetting is itself signal.
 }
 ```
 
 **Vector index:** `memories.embedding` — HNSW, 1024 dim, cosine. Recalled via `recall_memory(query, k=5)`.
+
+## `budgets` (V6)
+
+User-set per-category monthly spending caps. The agent reads active budgets when assessing whether a spend is concerning; the dashboard renders progress bars against them.
+
+```js
+{
+  _id: ObjectId,
+  user_id: "u_482",
+  category: "food",                     // top-level category: 'food' | 'shopping' | 'transport' |
+                                        // 'entertainment' | 'bills' | ... (top-level, not the dotted
+                                        // sub-category like 'food.delivery' used in transactions).
+  limit: 400.00,                        // float > 0; the monthly cap in user currency.
+  period: "month",                      // currently only 'month'; reserved for future 'week' | 'year'.
+  status: "active",                     // 'active' | 'abandoned'
+  created_at: ISODate(...),             // UTC, server-stamped on first insert; preserved across edits
+  updated_at: ISODate(...)              // UTC, bumped on every set_budget upsert
+}
+```
+
+**One ACTIVE budget per (user_id, category).** `set_budget` upserts — if an active budget exists for the same `(user_id, category)`, it edits the `limit` in place (preserves `created_at`, bumps `updated_at`). If none exists, it inserts a new doc with `status: "active"`. This is why there is no separate `edit_budget` tool: "create" and "edit" are the same intent from the user's perspective ("set my food budget to $400").
+
+**`abandon_budget` flips `status` to `"abandoned"` — it never deletes.** Same reasoning as `goals.abandoned_at`: the agent retains the history ("you abandoned your food budget last month") and a future `set_budget` for the same category creates a fresh active doc rather than reviving the abandoned one. Readers querying "current budgets" filter on `{status: "active"}`.
 
 ## `interventions`
 
@@ -215,6 +248,35 @@ The cron author does NOT need to special-case the naive read — `datetime.now(U
 
 When the agent observes a pattern AND wants a future ping anchored to the user's acceptance, both fire: `propose_intervention` for the pattern + `schedule_reminder` (with `related_intervention_id`) for the literal future ping.
 
+## `inbox_messages`
+
+The persistence layer for proactive notifications surfaced to the user outside an active chat turn. Written by the `weekly_summary` and `reminders` crons (the `POST /agent/run-weekly-summary` and `POST /agent/run-reminders` endpoints); rendered in the in-app inbox.
+
+```js
+{
+  _id: ObjectId,
+  user_id: "u_482",
+  type: "weekly_summary",               // 'reminder' | 'weekly_summary'
+  title: "Your week in spending",       // short headline rendered as the inbox row label
+  body: "You spent $214 this week...",  // full message body, rendered when the user opens the item
+  metadata: {                           // type-specific payload; free-shape per type.
+    week_start: "2026-06-01"            //   weekly_summary: { week_start: "YYYY-MM-DD" }
+                                        //   reminder: { reminder_id: ObjectId, source: "user"|"agent",
+                                        //               related_intervention_id?: ObjectId }
+  },
+  created_at: ISODate(...)              // UTC, server-stamped by the cron at write time;
+                                        //   the inbox sorts by this field descending.
+}
+```
+
+**Why a separate collection (not just `reminders` + `interventions` in the UI):** the inbox is a read model. The cron is the writer; the agent's tools are NOT. `reminders` carries scheduling state (`fires_at`, `status: pending|fired|cancelled`) and `interventions` carries lifecycle state (`status: pending|responded`) — conflating those with "what does the user see in their inbox right now?" forces the frontend to understand both schemas. `inbox_messages` is the flattened, render-ready projection: one row, one card.
+
+**Cron → inbox flow:**
+- `reminders` cron: finds reminders where `{status: "pending", fires_at: {$lte: now}}`, writes one `inbox_messages` doc per fired reminder (with `type: "reminder"` and `metadata.reminder_id` linking back), then flips the reminder's `status` to `"fired"`.
+- `weekly_summary` cron: runs `summarize_week` for the user, writes the result as one `inbox_messages` doc (`type: "weekly_summary"`, `metadata.week_start` set to the Monday string per the week-semantics contract in `architecture.md`).
+
+The writers are crons, not agent tools — the agent doesn't write to this collection directly. (Future scope: a `read_inbox` agent tool so the agent can reference past summaries in conversation. Not in scope for the hackathon.)
+
 ## `langgraph_store` (managed)
 
 LangGraph's MongoDB Store, GA in 2026. Namespaced agent memory (thread state, scratchpad, conversation history). We don't manage the schema — LangGraph does.
@@ -225,8 +287,9 @@ LangGraph's MongoDB Store, GA in 2026. Namespaced agent memory (thread state, sc
 
 | Job                    | Where           | Why MongoDB                                       |
 | ---------------------- | --------------- | ------------------------------------------------- |
-| Operational records    | `transactions`, `goals`, `interventions`, `outcomes`, `user_context` | Schema-flexible, fast indexed reads |
+| Operational records    | `transactions`, `goals`, `budgets`, `interventions`, `outcomes`, `user_context` | Schema-flexible, fast indexed reads |
 | Semantic recall        | `memories.embedding` vector index                              | Atlas Vector Search built in        |
+| Proactive inbox        | `inbox_messages` (written by the weekly_summary + reminders crons) | Same store, no second backend |
 | Agent thread memory    | `langgraph_store`                                              | LangGraph adapter is first-class    |
 | Query tuning           | MCP server                                                     | 40+ tools the agent can call itself |
 
