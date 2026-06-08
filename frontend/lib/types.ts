@@ -41,3 +41,20 @@ export type InboxResponse = {
   user_id: string;
   messages: InboxMessage[];
 };
+
+export type Goal = {
+  id: string;
+  user_id: string;
+  title: string;
+  target_amount: number;
+  current_amount: number;
+  target_date: string; // ISO datetime
+  pace_check: "weekly";
+  status: "active" | "paused" | "complete" | "abandoned";
+  created_at: string; // ISO datetime
+};
+
+export type GoalsResponse = {
+  user_id: string;
+  goals: Goal[];
+};

@@ -38,6 +38,7 @@ from agent.tools.propose_intervention import (
     propose_intervention,
 )
 from agent.tools.forget_memory import ForgetMemoryInput, forget_memory
+from agent.tools.list_goals import ListGoalsInput, list_goals
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
 from agent.tools.recall_memory import RecallMemoryInput, recall_memory
 from agent.tools.respond_to_intervention import (
@@ -53,6 +54,7 @@ from agent.tools.update_user_context import (
     UpdateUserContextInput,
     update_user_context,
 )
+from agent.tools.write_goal import WriteGoalInput, write_goal
 from agent.tools.write_memory import WriteMemoryInput, write_memory
 
 
@@ -145,8 +147,33 @@ _DESCRIPTIONS = {
         "Use when the user asks about a specific goal, when proposing an "
         "intervention that depends on goal progress, or as part of a "
         "weekly summary. Returns a structured verdict + a one-line note "
-        "you can paraphrase. Pass the goal_id as a string (the agent must "
-        "have it from a prior context — there is no list_goals tool yet)."
+        "you can paraphrase. Pass the goal_id as a string — get it from "
+        "list_goals."
+    ),
+    "list_goals": (
+        "List the user's savings goals so you can discover goal_ids to "
+        "feed into check_goal_pace. REQUIRED before check_goal_pace any "
+        "time the user asks about goals in general ('how am I doing?', "
+        "'what are my goals?', 'am I on track?') — without it, you have "
+        "no goal_id to act on. Defaults to active goals only; pass "
+        "status='all' if the user explicitly asks about paused / "
+        "completed / abandoned goals. Returns one row per goal with "
+        "title + target + current + target_date — use this to write a "
+        "compact reply ('You're 64% to your Emergency fund, on track for "
+        "March 2027') without calling check_goal_pace if the user just "
+        "wants the rough picture."
+    ),
+    "write_goal": (
+        "Persist a new savings goal the user just stated. Use when the "
+        "user says they want to save for something concrete: 'I want to "
+        "save $5000 for a Japan trip by December', 'I'm trying to build "
+        "a $10k emergency fund by end of year', 'Help me save $2000 for "
+        "a laptop in 6 months'. Resolve relative dates ('by December', "
+        "'in 6 months', 'end of year') to a concrete YYYY-MM-DD BEFORE "
+        "calling — the tool will not parse natural-language dates. If "
+        "the user gives no current_amount, default to 0. Returns the "
+        "goal_id; you can pass it to check_goal_pace in the same turn "
+        "or list it back to the user in your reply."
     ),
     "propose_intervention": (
         "Propose an intervention the user can accept, decline, or modify: "
@@ -245,11 +272,11 @@ def _wrap_tool(
 
 
 async def _build_tools() -> list[BaseTool]:
-    """Build the agent's tool list: 12 native tools + MongoDB MCP tools (R1).
+    """Build the agent's tool list: 14 native tools + MongoDB MCP tools (R1).
 
     MCP tools come from a Node subprocess (`npx mongodb-mcp-server`) lazily
     spawned on first call. If the subprocess fails to start, get_mcp_tools()
-    returns [] and the agent still boots with the 12 native tools.
+    returns [] and the agent still boots with the 14 native tools.
     """
     native: list[BaseTool] = [
         _wrap_tool(query_transactions, name="query_transactions", input_model=QueryTransactionsInput),
@@ -258,6 +285,8 @@ async def _build_tools() -> list[BaseTool]:
         _wrap_tool(write_memory, name="write_memory", input_model=WriteMemoryInput),
         _wrap_tool(forget_memory, name="forget_memory", input_model=ForgetMemoryInput),
         _wrap_tool(update_user_context, name="update_user_context", input_model=UpdateUserContextInput),
+        _wrap_tool(write_goal, name="write_goal", input_model=WriteGoalInput),
+        _wrap_tool(list_goals, name="list_goals", input_model=ListGoalsInput),
         _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
         _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),
         _wrap_tool(respond_to_intervention, name="respond_to_intervention", input_model=RespondToInterventionInput),

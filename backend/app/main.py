@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import agent, aggregations, chat, inbox, ingest, interventions, transactions
+from app.api import agent, aggregations, chat, goals, inbox, ingest, interventions, transactions
 from app.db.client import close_mongo, ensure_indexes, ping_mongo
 
 
@@ -20,6 +20,7 @@ app.include_router(transactions.router)
 app.include_router(chat.router)
 app.include_router(inbox.router)
 app.include_router(interventions.router)
+app.include_router(goals.router)
 app.include_router(agent.router)
 
 

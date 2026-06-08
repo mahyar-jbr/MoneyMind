@@ -19,19 +19,24 @@ import {
   SavingsGoals,
   TrendChart,
 } from "@/components/dashboard/widgets";
-import { getInbox, getTransactions } from "@/lib/api";
+import { getGoals, getInbox, getTransactions } from "@/lib/api";
 import {
   buildBuckets,
   categoriesPresent,
   keyOf,
   type Period,
 } from "@/lib/analytics";
-import type { InboxMessage, Transaction } from "@/lib/types";
+import type { Goal, InboxMessage, Transaction } from "@/lib/types";
 
 type State =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; transactions: Transaction[]; inbox: InboxMessage[] };
+  | {
+      status: "ready";
+      transactions: Transaction[];
+      inbox: InboxMessage[];
+      goals: Goal[];
+    };
 
 export default function DashboardPage() {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -43,14 +48,21 @@ export default function DashboardPage() {
     const ac = new AbortController();
     (async () => {
       try {
+        // Inbox + goals are best-effort: a failure shouldn't take down
+        // the dashboard. Transactions are required (everything else
+        // aggregates from them).
         const inboxPromise = getInbox(20, ac.signal)
           .then((r) => r.messages ?? [])
           .catch(() => [] as InboxMessage[]);
+        const goalsPromise = getGoals("active", ac.signal)
+          .then((r) => r.goals ?? [])
+          .catch(() => [] as Goal[]);
         const tx = await getTransactions(500, ac.signal);
         setState({
           status: "ready",
           transactions: tx.transactions ?? [],
           inbox: await inboxPromise,
+          goals: await goalsPromise,
         });
       } catch {
         if (!ac.signal.aborted) setState({ status: "error" });
@@ -150,7 +162,7 @@ export default function DashboardPage() {
                 <IncomeExpenses buckets={seriesBuckets} currency={currency} />
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
-                <SavingsGoals currency={currency} />
+                <SavingsGoals goals={state.goals} currency={currency} />
                 <LargestPurchases txns={periodTxns} currency={currency} />
               </div>
               <TransactionsList transactions={periodTxns} />

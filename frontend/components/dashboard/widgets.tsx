@@ -19,10 +19,10 @@ import {
   pctChange,
   rankCategories,
 } from "@/lib/analytics";
-import type { Transaction } from "@/lib/types";
+import type { Goal, Transaction } from "@/lib/types";
 import { formatCategory, formatCurrency, formatDate } from "@/lib/dashboard";
 import { categoryIcon } from "@/lib/categories";
-import { DEMO_BUDGETS, DEMO_GOALS } from "@/lib/demo";
+import { DEMO_BUDGETS } from "@/lib/demo";
 
 export const CARD =
   "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[color:var(--color-surface-hi)]/60 to-[color:var(--color-surface)]/40 shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_24px_60px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl";
@@ -506,21 +506,45 @@ export function BudgetProgress({
 
 /* ---------- Savings goals ---------- */
 
-export function SavingsGoals({ currency }: { currency: string }) {
+// V1 — backed by real /api/goals data fetched in dashboard/page.tsx.
+// Empty state nudges the user toward the chat where write_goal is the
+// only path to create a goal (no UI form on purpose — the agent flow
+// is the demo beat).
+export function SavingsGoals({
+  goals,
+  currency,
+}: {
+  goals: Goal[];
+  currency: string;
+}) {
+  if (goals.length === 0) {
+    return (
+      <Panel title="Savings goals" icon={<PiggyBank className="h-4 w-4 text-[color:var(--color-accent)]" />}>
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <p className="text-sm text-[color:var(--color-fg-muted)]">
+            No goals yet.
+          </p>
+          <p className="text-xs text-[color:var(--color-fg-muted)]">
+            Ask MoneyMind in chat: <span className="text-[color:var(--color-fg)]">&quot;Help me save $5,000 for a Japan trip by December.&quot;</span>
+          </p>
+        </div>
+      </Panel>
+    );
+  }
   return (
-    <Panel title="Savings goals" icon={<PiggyBank className="h-4 w-4 text-[color:var(--color-accent)]" />} demo>
+    <Panel title="Savings goals" icon={<PiggyBank className="h-4 w-4 text-[color:var(--color-accent)]" />}>
       <ul className="flex flex-col gap-3.5">
-        {DEMO_GOALS.map((g) => {
-          const pct = (g.saved / g.target) * 100;
+        {goals.map((g) => {
+          const pct = g.target_amount > 0 ? (g.current_amount / g.target_amount) * 100 : 0;
           return (
-            <li key={g.name}>
+            <li key={g.id}>
               <div className="mb-1 flex items-center justify-between text-sm">
-                <span>{g.name}</span>
+                <span className="truncate">{g.title}</span>
                 <span className="tabular-nums text-[color:var(--color-fg-muted)]">
-                  {formatCurrency(g.saved, currency, { compact: true })} / {formatCurrency(g.target, currency, { compact: true })}
+                  {formatCurrency(g.current_amount, currency, { compact: true })} / {formatCurrency(g.target_amount, currency, { compact: true })}
                 </span>
               </div>
-              <Bar pct={pct} />
+              <Bar pct={Math.min(100, pct)} />
             </li>
           );
         })}
