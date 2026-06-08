@@ -347,7 +347,12 @@ export function TrendChart({
         </span>
       }
     >
-      <div className="flex h-44 items-end gap-2">
+      {/* Outer container is the chart area. h-44 sets the bar canvas
+          height; buttons fill it with `h-full` so the inner bar's
+          percentage-height resolves against a real pixel parent. Without
+          h-full on the button, `bar h-{X}%` collapses to 0 because the
+          % can't resolve against an auto-height parent. */}
+      <div className="flex h-44 items-stretch gap-2">
         {data.map((b) => {
           const active = b.key === selectedKey;
           return (
@@ -355,7 +360,7 @@ export function TrendChart({
               key={b.key}
               type="button"
               onClick={() => onSelect(b.key)}
-              className="group flex flex-1 flex-col items-center gap-2"
+              className="group flex h-full flex-1 flex-col items-center gap-2"
               title={`${b.label}: ${formatCurrency(b.spend, currency)}`}
             >
               <div className="flex h-full w-full items-end justify-center">
@@ -399,9 +404,12 @@ export function IncomeExpenses({
         </span>
       }
     >
-      <div className="flex h-44 items-end gap-3">
+      {/* Same height-resolution fix as TrendChart: each column needs
+          `h-full` so the inner `bar h-{X}%` resolves against a real
+          pixel parent instead of collapsing to 0. */}
+      <div className="flex h-44 items-stretch gap-3">
         {data.map((b) => (
-          <div key={b.key} className="flex flex-1 flex-col items-center gap-2">
+          <div key={b.key} className="flex h-full flex-1 flex-col items-center gap-2">
             <div className="flex h-full w-full items-end justify-center gap-1">
               <div
                 className="w-1/2 max-w-[18px] rounded-t-md bg-emerald-400/80"
