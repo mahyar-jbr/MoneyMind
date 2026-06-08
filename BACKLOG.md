@@ -13,8 +13,8 @@
 | R2 | ✅ **done 2026-06-05** — Vertex AI migration verified live in PROD. `moneymind-agent@moneymind-hack.iam` SA, `roles/aiplatform.user`, key as `GOOGLE_APPLICATION_CREDENTIALS_JSON_B64` (base64 — raw JSON corrupted PEM newlines). Import fix: `langchain_google_vertexai.chat_models` submodule (cold-import 236s → 2.1s). 222 tests, ruff clean. | @mahyar | — |
 | R4 | ✅ **done 2026-06-05** — Live URLs: frontend https://money-mind-seven.vercel.app (Vercel, Next 15) + backend+agent https://moneymind-production-2a7e.up.railway.app (Railway, single Docker container). End-to-end verified: Clerk sign-in → dashboard renders $17,380/26-weeks → chat returns live Vertex Gemini reply. | @mahyar | — |
 | R-budget | ✅ **done 2026-06-06** — GCP budget alert set on `moneymind-hack` at $300 with 50/90/100% triggers. | @mahyar | — |
-| R1 | ✅ **done 2026-06-06** — MongoDB MCP server wired as first-class tool source. `agent/mcp_integration/client.py` lazy-spawns `npx mongodb-mcp-server@latest --readOnly` on first `get_mcp_tools()`; MCP tools get `mongo_` prefix and join the **12 native tools** in `create_react_agent(tools=)` (12th = `forget_memory`, shipped in V3, `cd17bef`). `_build_tools` + `build_graph` are async; cascaded through `arun_chat`, `stream_chat`, 14 test_graph callsites. `--readOnly` (camelCase) hardcoded + enforced by `test_server_config_includes_read_only_flag` — kebab-case form was caught failing in Railway logs and fixed in `48f23e6`. Graceful fallback: spawn failure returns `[]`, agent still boots with the 12 native tools. `MONGODB_MCP_DISABLE=1` env-var kill switch wired in `e62fe51` in case the upstream `mongodb-mcp-server` package regresses (it currently ships with a `Cannot find module 'vary'` transitive bug; native tools cover everything end-to-end). conftest.py autouse stubs `get_mcp_tools` to `[]` in graph tests. README + system prompt updated. | @mahyar | — |
-| R-infra | ✅ **done 2026-06-06 EOD** — Production-correctness fixes caught during live end-to-end testing: (1) **lifespan warmup** in `agent/serve.py` so the heavy graph import (langchain_google_vertexai + langgraph + 12 tool modules, 30–240s cold) runs on a background thread during FastAPI's lifespan startup; uvicorn announces 'ready' in <1s and Railway healthcheck no longer risks restart-loop. (2) **`astream_chat`** added in `agent/graphs/main.py`; serve.py's async `/chat` handler awaits it via `async for` — every request stays on a single event loop, motor cursors no longer cross loops (`RuntimeError: Event loop is closed` on second-message-onwards reproduced + fixed). (3) Vercel `/api/chat` route now pipes upstream through an explicit `ReadableStream` so chunks flush instead of buffering; `X-Accel-Buffering: no` + `dynamic=force-dynamic` + `maxDuration=300` set. (4) Frontend `useEffect` unmount cleanup that called `abortRef.current?.abort()` removed — it was canceling in-flight chat requests at ~1.85s in prod. | @mahyar | — |
+| R1 | ✅ **done 2026-06-06** — MongoDB MCP server wired as first-class tool source. `agent/mcp_integration/client.py` lazy-spawns `npx mongodb-mcp-server@latest --readOnly` on first `get_mcp_tools()`; MCP tools get `mongo_` prefix and join the native tools in `create_react_agent(tools=)` (12 native at R1 write; grew to **15 native** as of 2026-06-08 — V1 added `write_goal` + `list_goals` + `abandon_goal`). `_build_tools` + `build_graph` are async; cascaded through `arun_chat`, `stream_chat`, 14 test_graph callsites. `--readOnly` (camelCase) hardcoded + enforced by `test_server_config_includes_read_only_flag` — kebab-case form was caught failing in Railway logs and fixed in `48f23e6`. Graceful fallback: spawn failure returns `[]`, agent still boots with the native tools. `MONGODB_MCP_DISABLE=1` env-var kill switch wired in `e62fe51` in case the upstream `mongodb-mcp-server` package regresses (it currently ships with a `Cannot find module 'vary'` transitive bug; native tools cover everything end-to-end). conftest.py autouse stubs `get_mcp_tools` to `[]` in graph tests. README + system prompt updated. | @mahyar | — |
+| R-infra | ✅ **done 2026-06-06 EOD** — Production-correctness fixes caught during live end-to-end testing: (1) **lifespan warmup** in `agent/serve.py` so the heavy graph import (langchain_google_vertexai + langgraph + 15 tool modules as of 2026-06-08, 30–240s cold) runs on a background thread during FastAPI's lifespan startup; uvicorn announces 'ready' in <1s and Railway healthcheck no longer risks restart-loop. (2) **`astream_chat`** added in `agent/graphs/main.py`; serve.py's async `/chat` handler awaits it via `async for` — every request stays on a single event loop, motor cursors no longer cross loops (`RuntimeError: Event loop is closed` on second-message-onwards reproduced + fixed). (3) Vercel `/api/chat` route now pipes upstream through an explicit `ReadableStream` so chunks flush instead of buffering; `X-Accel-Buffering: no` + `dynamic=force-dynamic` + `maxDuration=300` set. (4) Frontend `useEffect` unmount cleanup that called `abortRef.current?.abort()` removed — it was canceling in-flight chat requests at ~1.85s in prod. | @mahyar | — |
 | R8 | **Devpost draft** — walk form, save draft, send team invites. Independent of R1/R2/R4. | @mahyar | XS |
 | R9 | **Demo video: target 2:00-2:30**, not 90s. Cap is 3 min. Extra time = MCP-firing-on-camera + vector recall + intervention loop + memory beat. Independent. | @kasra | XS |
 
@@ -95,39 +95,67 @@
 
 > Added 2026-06-06 EOD after walking through what the agent **can't** do today vs. the pitch's promise. The product already works end-to-end with memory + active context + interventions, but these four items are the gap between "demo of an idea" and "ship it tomorrow". Each entry below has been fact-checked against the shipped code; current_state cites what's actually there.
 
-### V1 — Goals: create + read via chat or dashboard
+### V1 — Goals: create + read + abandon via chat or dashboard
 
-**Current state (verified 2026-06-06):**
-- ✅ `check_goal_pace` tool exists in [`agent/tools/check_goal_pace.py`](agent/tools/check_goal_pace.py) — reads a goal by `goal_id`, returns pace verdict (ahead/on_track/behind/past_due/...).
-- ✅ Goals collection schema documented in [`docs/data-model.md`](docs/data-model.md).
-- ❌ No `write_goal` / `list_goals` / `update_goal` agent tools exist.
-- ❌ No `/goals` backend route exists (`backend/app/api/` has no goals file).
-- ❌ No frontend goals UI (`grep -rln "goals" frontend/` returns only the home-page mention).
-- ❌ User's Atlas `goals` collection is empty for the Clerk user (`count_documents({user_id: ...})` returned 0).
-- 🔴 **`check_goal_pace` is unusable in practice** — the agent has no way to discover a `goal_id` to pass in. Today the goal beat is invisible.
+**✅ DONE 2026-06-08** — Full stack landed end-to-end, plus a follow-up `abandon_goal` tool shipped same night. Both verified live against Atlas under the seeded `u_482` user AND through the prod chat URL under Mahyar's Clerk user.
 
-**Scope (minimum for demo):**
-- Add `write_goal(title, target_amount, target_date, current_amount=0)` agent tool — single insert into `goals`.
-- Add `list_goals()` agent tool — returns user's goals so the LLM can decide which `goal_id` to feed `check_goal_pace`.
-- Backend: optional — agent tools write directly to Atlas via motor, no backend route needed for the chat path. Add `GET /goals` only if dashboard needs it.
-- Dashboard widget: read goals via new `GET /goals`, render alongside StatCards. Empty state with "ask MoneyMind to set a goal" copy.
+**What shipped (V1 core):**
+- NEW [`agent/tools/write_goal.py`](agent/tools/write_goal.py) — single insert into `goals` collection. Persisted shape matches [`docs/data-model.md § goals`](docs/data-model.md#L30-L46) exactly (`title`, `target_amount`, `current_amount`, `target_date`, `pace_check: "weekly"`, `status: "active"`, `created_at`). `current_amount` defaults to 0; the LLM resolves relative phrases like "by December" to concrete YYYY-MM-DD before the call (the tool doesn't parse natural-language dates).
+- NEW [`agent/tools/list_goals.py`](agent/tools/list_goals.py) — `find` with default `status="active"` filter (paused/complete/abandoned hidden unless `status="all"` or a specific status passed). Sort: newest first by `created_at`. Limit 20.
+- NEW [`backend/app/api/goals.py`](backend/app/api/goals.py) — single Clerk-authed `GET /goals` route. Status filter via query param. Serialization mirrors the interventions router. **No POST** — goal creation is agent-only by design (forces the demo through chat).
+- NEW [`frontend/app/api/goals/route.ts`](frontend/app/api/goals/route.ts) — Vercel proxy mirroring `/api/transactions` pattern.
+- [`agent/graphs/main.py`](agent/graphs/main.py) — both tools registered (12 → 14 native). Stale `"there is no list_goals tool yet"` note in `check_goal_pace`'s description fixed.
+- [`agent/prompts/system.py`](agent/prompts/system.py) — new **GOALS** section: "save $X for Y by Z" → `write_goal`; "what are my goals?" → `list_goals` first, then `check_goal_pace` only for specific goals.
+- [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) — `SavingsGoals` rewritten to consume real `Goal[]` prop. SAMPLE pill removed. Empty state nudges user to chat: *"Ask MoneyMind: 'Help me save $5,000 for a Japan trip by December.'"*
+- [`frontend/app/dashboard/page.tsx`](frontend/app/dashboard/page.tsx) — fetches `getGoals("active")` in parallel with inbox (best-effort; failure → empty array, doesn't blow up dashboard).
+- [`frontend/lib/types.ts`](frontend/lib/types.ts) — `Goal` + `GoalsResponse` types.
+- [`frontend/lib/api.ts`](frontend/lib/api.ts) — `getGoals(status)` helper.
+- [`frontend/middleware.ts`](frontend/middleware.ts) — `/api/goals(.*)` added to Clerk protected routes.
+- [`frontend/lib/demo.ts`](frontend/lib/demo.ts) — `DEMO_GOALS` + `DemoGoal` deleted (replaced by real V1 data; header comment documents the swap).
 
-**Files to touch:** `agent/tools/write_goal.py` (NEW), `agent/tools/list_goals.py` (NEW), `agent/graphs/main.py` (register 2 tools + descriptions), `agent/prompts/system.py` (1 paragraph on goal triggers — "user mentions saving for X, call write_goal"), `backend/app/api/goals.py` (NEW, GET only), `frontend/components/dashboard/goals-widget.tsx` (NEW), `frontend/app/dashboard/page.tsx` (mount it).
+**Follow-up tool shipped same night — abandon_goal:**
+- NEW [`agent/tools/abandon_goal.py`](agent/tools/abandon_goal.py) — **status flip** (`active` → `abandoned`), NOT a delete. Goals schema already has `abandoned` as an enum value so no new field added. Goal stays in Atlas as audit trail; `list_goals`'s default `status="active"` filter hides it from the dashboard automatically. Mirrors `forget_memory`'s UX with two call paths (query + goal_id confirmation follow-up) and four result branches. **No vector search** — uses simple title-word-overlap matching with a stopword list (articles + "forget"/"cancel"/"drop"/etc., since those are trigger verbs the user phrases around but never appear in goal titles).
+- [`agent/graphs/main.py`](agent/graphs/main.py) — registered as 14 → 15th native tool with the full disambiguation guidance baked into the tool description.
+- [`agent/prompts/system.py`](agent/prompts/system.py) — **ABANDONING A GOAL** section + **explicit disambiguation rule**: `"forget that I'm bulking"` → `forget_memory` (bulking is a memory); `"forget the Japan trip"` → `abandon_goal` (Japan trip is a goal). Without this disambiguation Gemini conflates the two on "forget X" triggers.
 
-**Pattern reference:** mirror the write_memory + check_goal_pace pattern. tool → _wrap_tool registration → backend GET route → dashboard widget reads via Clerk proxy. Same flow as the intervention wiring shipped today.
+**Tests — 37 new hermetic tests, all pass:**
+- [`agent/tests/test_write_goal.py`](agent/tests/test_write_goal.py) — 12 tests: happy path, persisted-shape contract (every field in data-model.md), current_amount default + override, multi-goal distinct IDs, user_id isolation tripwire, 5 validation tripwires (empty user_id, empty title, zero/negative target, negative current).
+- [`agent/tests/test_list_goals.py`](agent/tests/test_list_goals.py) — 10 tests: default active-only, newest-first sort, status='all' / 'paused' / 'complete' filters, user_id isolation tripwire, unknown-user empty, target_date date-coercion, ObjectId stringification, 3 validation.
+- [`agent/tests/test_abandon_goal.py`](agent/tests/test_abandon_goal.py) — 15 tests: single-match flip + persisted abandoned_at, multi-match needs_confirmation, no-match returns active_titles, all-stopword fallthrough, goal_id direct path, idempotency on already-abandoned, invalid ObjectId, both-fields validation, **user_id isolation tripwires for BOTH paths** (query AND goal_id — u_482 cannot touch u_other's goal), paused-goal invisibility, validation.
 
-**Effort:** 4-6h for @mahyar (agent tools + backend GET + dashboard widget all on the same head).
+**Live trace verified end-to-end (real Atlas, u_482):**
+```
+TURN 1: "Help me save $5,000 for a Japan trip by December"
+  → write_goal(target_amount=5000, title="Japan trip", target_date=2026-12-01)
+  → Reply: "Got it — $5,000 Japan trip by Dec 1, 2026. I'll watch your progress."
+  → Atlas: goals 0 → 1
+
+TURN 2 (full history forwarded): "what are my goals?"
+  → list_goals()  [no over-call to check_goal_pace, matches rough-picture rule]
+  → Reply: "You have one active goal: a Japan trip for $5,000 by December 1.
+            You've currently saved $0 toward it. Want me to check how you're
+            pacing once you start contributing?"
+  → Dashboard auto-refresh: SavingsGoals widget shows "Japan trip · $0 / $5,000"
+
+TURN 3: "forget the Japan trip, I changed my mind"
+  → abandon_goal(query="Japan trip")
+  → Reply: "Got it — Japan trip is off the list."
+  → Atlas: active 1 → 0, Japan-trip status: active → abandoned (preserved)
+  → Dashboard auto-refresh: SavingsGoals widget shows empty state CTA
+```
+
+**Bug caught + fixed during build:** my initial stopword list for `abandon_goal` was missing the trigger verbs ("forget", "cancel", "drop", "abandon", "give up"). Title-match would have failed every realistic query because the user phrases around those verbs. Caught by `test_single_match_flips_status_to_abandoned` failing on the first run. Fixed by extending the stopwords set; commit explains why those words are signals the agent routes on, not match tokens.
+
+**AC results:**
+- [x] User says "I want to save $5000 for a trip to Japan by December" → agent calls `write_goal` → returns `goal_id`.
+- [x] User says "how am I doing on my goals?" → agent calls `list_goals` (per prompt rule, doesn't over-call check_goal_pace for the rough-picture case).
+- [x] Dashboard renders goals widget with progress bars.
+- [x] Empty state shows on dashboard with chat CTA until first goal exists.
+- [x] `SavingsGoals` swapped from `DEMO_GOALS` → real `getGoals()` fetch; SAMPLE pill removed.
+- [x] **BONUS:** User says "forget the Japan trip" → agent calls `abandon_goal` → status flipped, dashboard hides the goal.
+
 **Owner:** @mahyar (full stack)
-**Demo value:** HIGH — closes the "agent learns about your goals" slide which is currently invisible.
-**Risk:** LOW — additive only, no existing tool changes.
-**AC:**
-- [ ] User says "I want to save $5000 for a trip to Japan by December" → agent calls `write_goal` → returns `goal_id`.
-- [ ] User says "how am I doing on my goals?" → agent calls `list_goals` then `check_goal_pace` for each → reply names actual progress.
-- [ ] Dashboard renders goals widget with progress bars and pace status.
-- [ ] Empty state shows on dashboard until first goal exists.
-- [ ] [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) `SavingsGoals` component swapped from `DEMO_GOALS` import to a real `getGoals()` fetch; SAMPLE pill removed from that widget.
-
-**Recommendation:** **ship-must** — without this, slide-7 (goal pace) is a dead demo beat. Closes the SavingsGoals placeholder left over after V2's scope cut.
+**Recommendation:** SHIPPED — closes the "agent learns about your goals" slide. Last SAMPLE-tagged surface on the dashboard is now BudgetProgress (V6).
 
 ---
 
@@ -308,10 +336,10 @@ With ~5 days to submission and today already burned on a marathon bug-fix:
 | Priority | Item | Why |
 |---|---|---|
 | ✅ | ~~V2 dashboard polish~~ | **DONE 2026-06-07** — PR #52 + post-merge demo-readiness fixes + 2026-06-08 scope cut (NetWorth/Cash/UpcomingBills dropped); every visible KPI is real |
-| 1 | **V1 goals (write + list + dashboard widget)** | @mahyar full stack; closes slide-7's dead beat + auto-swaps the last SAMPLE-tagged widget (SavingsGoals) |
+| ✅ | ~~V1 goals (write + list + abandon + dashboard widget)~~ | **DONE 2026-06-08** — write_goal + list_goals + abandon_goal tools, GET /goals route, SavingsGoals swapped to real data, empty-state CTA, 37 hermetic tests, full slide-7 flow live-verified on prod URL |
 | ✅ | ~~V3 memory delete~~ | **DONE 2026-06-06 EOD** — soft-delete + confidence-gated single-turn; live-verified on Atlas (visible 1→0, soft-deleted 0→1) |
-| 2 | V4 Part A CSV upload | Team discussion after V1 lands |
-| 3 | V6 real Budgets | @mahyar full stack; mirrors V1 pattern; closes the cap-intervention loop end-to-end |
+| 1 | V4 Part A CSV upload | Team discussion now that V1+V2+V3 are all in |
+| 2 | V6 real Budgets | @mahyar full stack; mirrors V1 pattern; closes the cap-intervention loop end-to-end |
 
 **Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items. **V6 is also defer-by-default** — the visual is already on the dashboard (BudgetProgress + SAMPLE tag); only persistence is missing. Don't block the submission on it; ship if time-after-V1.
 
