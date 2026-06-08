@@ -1,12 +1,19 @@
-// DEMO PLACEHOLDER DATA.
-// The backend only stores transactions, so these widgets (net worth, cash,
-// budgets, goals, bills) show illustrative figures for the product walkthrough
-// and are tagged "demo" in the UI. Swap for real sources when they exist:
-// account linking (balances), user-set budgets, the goals collection, and
-// recurring-bill detection.
-
-export const DEMO_NET_WORTH = 82400;
-export const DEMO_CASH_AVAILABLE = 6230;
+// PLACEHOLDER DATA — illustrative figures for widgets whose real source
+// hasn't been built yet. Each consuming widget renders a visible "SAMPLE"
+// pill so it doesn't read as real financial data.
+//
+// Swap targets:
+//   - DEMO_BUDGETS → V6 (real Budgets feature): user-set per-category
+//     monthly limits, stored in a new `budgets` Atlas collection,
+//     mutated via agent tools.
+//   - DEMO_GOALS → V1 (Goals): write_goal + list_goals agent tools,
+//     backend GET /goals route, dashboard widget swap.
+//
+// Dropped 2026-06-07:
+//   - DEMO_NET_WORTH / DEMO_CASH_AVAILABLE — needed Plaid integration
+//     to be real; not in scope for the MongoDB-track pitch.
+//   - DEMO_BILLS — needed recurring-bill detection (Plaid OR ~3h of
+//     heuristics over transaction history); cut for demo credibility.
 
 // monthly budget per top-level category. "used" is computed from real spend.
 export const DEMO_BUDGETS: { category: string; limit: number }[] = [
@@ -22,12 +29,4 @@ export const DEMO_GOALS: DemoGoal[] = [
   { name: "Emergency fund", target: 10000, saved: 6400 },
   { name: "Japan trip", target: 3000, saved: 1840 },
   { name: "New laptop", target: 2200, saved: 700 },
-];
-
-export type DemoBill = { name: string; amount: number; dueInDays: number };
-export const DEMO_BILLS: DemoBill[] = [
-  { name: "Rent", amount: 1850, dueInDays: 4 },
-  { name: "Credit card", amount: 420, dueInDays: 9 },
-  { name: "Hydro + internet", amount: 165, dueInDays: 12 },
-  { name: "Phone", amount: 55, dueInDays: 18 },
 ];

@@ -18,7 +18,6 @@ import {
   LargestPurchases,
   SavingsGoals,
   TrendChart,
-  UpcomingBills,
 } from "@/components/dashboard/widgets";
 import { getInbox, getTransactions } from "@/lib/api";
 import {
@@ -151,13 +150,10 @@ export default function DashboardPage() {
                 <IncomeExpenses buckets={seriesBuckets} currency={currency} />
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
-                <UpcomingBills currency={currency} />
                 <SavingsGoals currency={currency} />
-              </div>
-              <div className="grid gap-5 lg:grid-cols-2">
                 <LargestPurchases txns={periodTxns} currency={currency} />
-                <TransactionsList transactions={periodTxns} />
               </div>
+              <TransactionsList transactions={periodTxns} />
               <Inbox messages={state.inbox} />
             </motion.div>
           )

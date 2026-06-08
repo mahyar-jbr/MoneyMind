@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
-  CalendarClock,
   PiggyBank,
   Receipt,
   Sparkles,
@@ -23,13 +22,7 @@ import {
 import type { Transaction } from "@/lib/types";
 import { formatCategory, formatCurrency, formatDate } from "@/lib/dashboard";
 import { categoryIcon } from "@/lib/categories";
-import {
-  DEMO_BILLS,
-  DEMO_BUDGETS,
-  DEMO_CASH_AVAILABLE,
-  DEMO_GOALS,
-  DEMO_NET_WORTH,
-} from "@/lib/demo";
+import { DEMO_BUDGETS, DEMO_GOALS } from "@/lib/demo";
 
 export const CARD =
   "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[color:var(--color-surface-hi)]/60 to-[color:var(--color-surface)]/40 shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_24px_60px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl";
@@ -169,6 +162,26 @@ export function DashboardFilters({
 
 /* ---------- Row 1: KPIs ---------- */
 
+// Days in the period the user has selected. For "month" we use the calendar
+// month's day count; for "week" it's always 7. Used to compute avg/day.
+function daysInPeriod(period: Period, bucketKey: string): number {
+  if (period === "week") return 7;
+  // bucketKey for month is "YYYY-MM"
+  const [yr, mo] = bucketKey.split("-").map(Number);
+  if (!yr || !mo) return 30;
+  // Date.UTC with day=0 returns the last day of the previous month, so we
+  // pass mo (1-indexed) which is "next month, day 0" = last day of mo.
+  return new Date(Date.UTC(yr, mo, 0)).getUTCDate();
+}
+
+// Pretty-print a category id like "food.delivery" → "Food delivery".
+function shortCategory(c: string): string {
+  const parts = c.split(".");
+  const part = parts.length > 1 ? parts.slice(1).join(" ") : parts[0];
+  const cleaned = (part || c).replace(/_/g, " ");
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 export function KpiRow({
   selected,
   prev,
@@ -186,15 +199,32 @@ export function KpiRow({
     selected && selected.income > 0
       ? ((selected.income - selected.spend) / selected.income) * 100
       : null;
+  // Two real KPIs replacing the old Net worth + Cash available placeholders.
+  // Both derive from the same Bucket the spend KPI already uses, so no extra
+  // data fetching and no extra useMemo gymnastics in the parent.
+  const days = selected ? daysInPeriod(granularity, selected.key) : 0;
+  const avgPerDay = days > 0 ? spend / days : 0;
+  const topCat = selected ? rankCategories(selected.byCategory, 1)[0] : undefined;
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <Kpi label="Net worth" value={formatCurrency(DEMO_NET_WORTH, currency, { compact: true })} demo />
-      <Kpi label="Cash available" value={formatCurrency(DEMO_CASH_AVAILABLE, currency, { compact: true })} demo />
       <Kpi
         label={granularity === "month" ? "Month spend" : "Week spend"}
         value={formatCurrency(spend, currency, { compact: true })}
         delta={change == null ? undefined : { pct: change, goodWhenDown: true }}
+      />
+      <Kpi
+        label="Avg / day"
+        value={formatCurrency(avgPerDay, currency, { compact: true })}
+      />
+      <Kpi
+        label="Top category"
+        value={topCat ? shortCategory(topCat.category) : "—"}
+        sublabel={
+          topCat && spend > 0
+            ? `${formatCurrency(topCat.amount, currency, { compact: true })} · ${Math.round((topCat.amount / spend) * 100)}%`
+            : undefined
+        }
       />
       <Kpi
         label="Savings rate"
@@ -208,23 +238,20 @@ export function KpiRow({
 function Kpi({
   label,
   value,
-  demo,
+  sublabel,
   delta,
 }: {
   label: string;
   value: string;
-  demo?: boolean;
+  sublabel?: string;
   delta?: { pct: number; goodWhenDown: boolean; raw?: boolean };
 }) {
   const good = delta ? (delta.goodWhenDown ? delta.pct < 0 : delta.pct > 0) : false;
   return (
     <div className={`${CARD} p-5`}>
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--color-fg-muted)]">
-          {label}
-        </p>
-        {demo ? <DemoTag /> : null}
-      </div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--color-fg-muted)]">
+        {label}
+      </p>
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
       {delta ? (
         <p
@@ -238,6 +265,10 @@ function Kpi({
           {delta.raw
             ? "of income saved"
             : `${Math.abs(delta.pct).toFixed(0)}% vs previous`}
+        </p>
+      ) : sublabel ? (
+        <p className="mt-1 truncate text-xs text-[color:var(--color-fg-muted)]">
+          {sublabel}
         </p>
       ) : (
         <p className="mt-1 text-xs text-[color:var(--color-fg-muted)]">&nbsp;</p>
@@ -493,28 +524,6 @@ export function SavingsGoals({ currency }: { currency: string }) {
             </li>
           );
         })}
-      </ul>
-    </Panel>
-  );
-}
-
-/* ---------- Upcoming bills ---------- */
-
-export function UpcomingBills({ currency }: { currency: string }) {
-  return (
-    <Panel title="Upcoming bills" icon={<CalendarClock className="h-4 w-4 text-[color:var(--color-accent)]" />} demo>
-      <ul className="flex flex-col gap-3">
-        {DEMO_BILLS.map((b) => (
-          <li key={b.name} className="flex items-center justify-between text-sm">
-            <div>
-              <p className="font-medium">{b.name}</p>
-              <p className="text-xs text-[color:var(--color-fg-muted)]">
-                in {b.dueInDays} day{b.dueInDays === 1 ? "" : "s"}
-              </p>
-            </div>
-            <span className="tabular-nums">{formatCurrency(b.amount, currency)}</span>
-          </li>
-        ))}
       </ul>
     </Panel>
   );
