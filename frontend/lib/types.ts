@@ -74,3 +74,18 @@ export type BudgetsResponse = {
   user_id: string;
   budgets: Budget[];
 };
+
+export type IngestStatementResponse = {
+  inserted: number;
+  duplicate_of_prior_upload: boolean;
+  issuer: string;
+  account_last4: string;
+  period_start: string | null;
+  period_end: string | null;
+  total_spend: number;
+  by_category: Record<string, number>;
+  payment_count: number;
+  payment_total: number;
+  warnings: string[];
+  source: string;
+};

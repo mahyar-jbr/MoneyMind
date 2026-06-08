@@ -4,6 +4,7 @@ import type {
   InboxResponse,
   GoalsResponse,
   BudgetsResponse,
+  IngestStatementResponse,
 } from "./types";
 
 // these hit our own /api proxy routes, which add auth and call the backend
@@ -51,5 +52,30 @@ export async function getBudgets(
 ): Promise<BudgetsResponse> {
   const res = await fetch(`/api/budgets?status=${status}`, { signal });
   if (!res.ok) throw new Error(`budgets failed: ${res.status}`);
+  return res.json();
+}
+
+// V4 — Bank-statement PDF upload. Multipart POST to our Vercel proxy
+// which forwards to the backend /ingest/statement route. Server-side
+// runs Gemini multimodal extraction + categorization + dedupe + bulk
+// insert. Returns a structured summary the chat surfaces as a system
+// card.
+export async function uploadStatement(
+  file: File,
+  signal?: AbortSignal,
+): Promise<IngestStatementResponse> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const res = await fetch("/api/ingest/statement", {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res
+      .json()
+      .catch(() => ({ error: `upload failed: ${res.status}` }));
+    throw new Error(body.error ?? `upload failed: ${res.status}`);
+  }
   return res.json();
 }

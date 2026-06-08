@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   Loader2,
+  Paperclip,
   PieChart,
   PiggyBank,
   Sparkles,
@@ -13,11 +14,14 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { streamChat } from "@/lib/chat-stream";
 import { InterventionCard } from "@/components/chat/intervention-card";
+import { StatementCard } from "@/components/chat/statement-card";
 import type { Intervention, InterventionResponse } from "@/lib/interventions";
 import {
   fetchPendingInterventions,
   respondToIntervention,
 } from "@/lib/interventions";
+import { uploadStatement } from "@/lib/api";
+import type { IngestStatementResponse } from "@/lib/types";
 
 type Role = "user" | "assistant";
 type ContentMessage = { id: string; role: Role; content: string };
@@ -26,7 +30,13 @@ type InterventionItem = {
   kind: "intervention";
   intervention: Intervention;
 };
-type Message = ContentMessage | InterventionItem;
+type StatementItem = {
+  id: string;
+  kind: "statement";
+  filename: string;
+  result: IngestStatementResponse;
+};
+type Message = ContentMessage | InterventionItem | StatementItem;
 
 const SUGGESTIONS: { text: string; icon: LucideIcon }[] = [
   { text: "How can you help me?", icon: Sparkles },
@@ -45,8 +55,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -85,7 +97,7 @@ export default function ChatPage() {
     abortRef.current = new AbortController();
     try {
       const turn = [...messages, userMsg]
-        .filter((m): m is ContentMessage => !("kind" in m))
+        .filter((m): m is ContentMessage => !("kind" in m))  // skip intervention + statement cards
         .map(({ role, content }) => ({ role, content }));
       for await (const chunk of streamChat(turn, abortRef.current.signal)) {
         setMessages((prev) =>
@@ -105,7 +117,7 @@ export default function ChatPage() {
         setMessages((prev) => {
           const seen = new Set(
             prev
-              .filter((m): m is InterventionItem => "kind" in m)
+              .filter((m): m is InterventionItem => "kind" in m && m.kind === "intervention")
               .map((m) => m.intervention.intervention_id),
           );
           const fresh = pending.filter((it) => !seen.has(it.intervention_id));
@@ -153,7 +165,7 @@ export default function ChatPage() {
     await respondToIntervention(interventionId, response, modifiedParams);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === itemId && "kind" in m
+        m.id === itemId && "kind" in m && m.kind === "intervention"
           ? {
               ...m,
               intervention: {
@@ -170,30 +182,109 @@ export default function ChatPage() {
     );
   }
 
+  async function handleFileUpload(file: File) {
+    if (uploading || streaming) return;
+
+    // Sanity check on extension/MIME before we burn an upload round-trip.
+    const isPdf =
+      file.name.toLowerCase().endsWith(".pdf") ||
+      file.type === "application/pdf";
+    if (!isPdf) {
+      const errMsg: ContentMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: `That doesn't look like a PDF (${file.name}). Drop a bank-statement PDF and I'll read it.`,
+      };
+      setMessages((m) => [...m, errMsg]);
+      return;
+    }
+
+    // Surface the upload as a user-side bubble so the conversation makes
+    // sense ("I uploaded Statement.pdf" → agent's import-card reply).
+    const userMsg: ContentMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: `📎 Uploaded ${file.name}`,
+    };
+    const loadingId = crypto.randomUUID();
+    const loadingMsg: ContentMessage = {
+      id: loadingId,
+      role: "assistant",
+      content: "Reading your statement…",
+    };
+    setMessages((m) => [...m, userMsg, loadingMsg]);
+    setUploading(true);
+
+    try {
+      const result = await uploadStatement(file);
+      // Replace the "Reading…" bubble with a one-line summary + drop a
+      // structured card right below.
+      const summary = result.duplicate_of_prior_upload
+        ? `This statement was already imported. Here's the breakdown I have on file.`
+        : `Imported ${result.inserted} transactions from your ${result.issuer || "statement"} (${result.period_start ?? ""} → ${result.period_end ?? ""}). Total spend ${formatTotal(result.total_spend)}. Check your dashboard for the bars.`;
+      const cardItem: StatementItem = {
+        id: crypto.randomUUID(),
+        kind: "statement",
+        filename: file.name,
+        result,
+      };
+      setMessages((prev) =>
+        prev.flatMap((m) =>
+          m.id === loadingId
+            ? [{ ...m, content: summary } as ContentMessage, cardItem]
+            : [m],
+        ),
+      );
+    } catch (err) {
+      const errMsg = (err as Error).message || "upload failed";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingId && !("kind" in m)
+            ? {
+                ...m,
+                content: `I couldn't read that statement (${errMsg}). Want to try a different file?`,
+              }
+            : m,
+        ),
+      );
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <AppShell activeHref="/chat" glow={false}>
       <div className="mx-auto flex h-[calc(100svh-4rem)] w-full max-w-3xl flex-col">
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           <div className="flex flex-col gap-4">
-            {messages.map((m) =>
-              "kind" in m ? (
-                <div key={m.id} className="flex justify-start">
-                  <InterventionCard
-                    intervention={m.intervention}
-                    onRespond={(response, modifiedParams) =>
-                      respondTo(
-                        m.id,
-                        m.intervention.intervention_id,
-                        response,
-                        modifiedParams,
-                      )
-                    }
-                  />
-                </div>
-              ) : (
-                <Bubble key={m.id} message={m} />
-              ),
-            )}
+            {messages.map((m) => {
+              if ("kind" in m && m.kind === "intervention") {
+                return (
+                  <div key={m.id} className="flex justify-start">
+                    <InterventionCard
+                      intervention={m.intervention}
+                      onRespond={(response, modifiedParams) =>
+                        respondTo(
+                          m.id,
+                          m.intervention.intervention_id,
+                          response,
+                          modifiedParams,
+                        )
+                      }
+                    />
+                  </div>
+                );
+              }
+              if ("kind" in m && m.kind === "statement") {
+                return (
+                  <div key={m.id} className="flex justify-start">
+                    <StatementCard result={m.result} filename={m.filename} />
+                  </div>
+                );
+              }
+              return <Bubble key={m.id} message={m as ContentMessage} />;
+            })}
             {messages.length === 1 && (
               <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
@@ -222,6 +313,34 @@ export default function ChatPage() {
             onSubmit={onSubmit}
             className="mx-auto flex w-full items-end gap-2 px-4 py-3"
           >
+            {/* V4 — bank-statement upload. Hidden input, paperclip
+                button triggers file picker, sanity-checks .pdf, posts
+                to /api/ingest/statement, and the StatementCard render
+                happens via the message thread. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || streaming}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/[0.08] bg-[color:var(--color-surface)]/60 text-[color:var(--color-fg-muted)] backdrop-blur-xl transition-colors hover:border-[color:var(--color-accent)]/40 hover:bg-[color:var(--color-surface-hi)]/60 hover:text-[color:var(--color-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={uploading ? "Reading statement" : "Upload a bank statement PDF"}
+              title="Upload a bank statement PDF"
+            >
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -231,14 +350,14 @@ export default function ChatPage() {
                   send(input);
                 }
               }}
-              placeholder="Tell MoneyMind what's going on…"
+              placeholder={uploading ? "Reading your statement…" : "Tell MoneyMind what's going on…"}
               rows={1}
-              disabled={streaming}
+              disabled={streaming || uploading}
               className="max-h-40 min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.08] bg-[color:var(--color-surface)]/60 px-4 py-2.5 text-sm leading-6 outline-none backdrop-blur-xl transition-colors placeholder:text-zinc-500 focus:border-[color:var(--color-accent)] focus:ring-2 focus:ring-[color:var(--color-accent)]/20 disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={!input.trim() || streaming}
+              disabled={!input.trim() || streaming || uploading}
               className="grid h-11 w-11 place-items-center rounded-full bg-[color:var(--color-accent)] text-zinc-950 transition-colors hover:bg-[color:var(--color-accent-hi)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-hi)] disabled:text-[color:var(--color-fg-muted)]"
               aria-label={streaming ? "Sending" : "Send"}
             >
@@ -253,6 +372,12 @@ export default function ChatPage() {
       </div>
     </AppShell>
   );
+}
+
+// Short currency formatter for chat-thread summary lines (so we don't
+// pull the whole Intl machinery into the upload handler).
+function formatTotal(n: number): string {
+  return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 function Bubble({ message }: { message: ContentMessage }) {
