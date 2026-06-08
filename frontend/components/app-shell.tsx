@@ -9,12 +9,19 @@ const NAV = [
 export function AppShell({
   children,
   activeHref,
+  glow = true,
 }: {
   children: React.ReactNode;
   activeHref?: string;
+  glow?: boolean;
 }) {
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="relative isolate flex min-h-svh flex-col overflow-hidden">
+      {glow ? (
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute -top-40 left-1/2 h-[480px] w-[900px] -translate-x-1/2 rounded-full bg-[color:var(--color-accent)]/[0.06] blur-[150px]" />
+        </div>
+      ) : null}
       <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[color:var(--color-bg)]/40 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center justify-between px-6">
           <Link

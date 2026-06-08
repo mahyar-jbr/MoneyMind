@@ -1,45 +1,55 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { Wallet } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { StatCards } from "@/components/dashboard/stat-cards";
-import { SpendChart } from "@/components/dashboard/spend-chart";
-import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TransactionsList } from "@/components/dashboard/transactions-list";
 import { Inbox } from "@/components/dashboard/inbox";
-import { getWeekly, getTransactions, getInbox } from "@/lib/api";
-import type { WeekBucket, Transaction, InboxMessage } from "@/lib/types";
+import {
+  BudgetProgress,
+  CARD,
+  CategoryBreakdown,
+  DashboardFilters,
+  IncomeExpenses,
+  InsightsPanel,
+  KpiRow,
+  LargestPurchases,
+  SavingsGoals,
+  TrendChart,
+  UpcomingBills,
+} from "@/components/dashboard/widgets";
+import { getInbox, getTransactions } from "@/lib/api";
+import {
+  buildBuckets,
+  categoriesPresent,
+  keyOf,
+  type Period,
+} from "@/lib/analytics";
+import type { InboxMessage, Transaction } from "@/lib/types";
 
 type State =
   | { status: "loading" }
   | { status: "error" }
-  | {
-      status: "ready";
-      weeks: WeekBucket[];
-      transactions: Transaction[];
-      inbox: InboxMessage[];
-    };
+  | { status: "ready"; transactions: Transaction[]; inbox: InboxMessage[] };
 
 export default function DashboardPage() {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [period, setPeriod] = useState<Period>("month");
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [category, setCategory] = useState<string>("all");
 
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
-        // inbox is best-effort: if it fails, the dashboard still loads
         const inboxPromise = getInbox(20, ac.signal)
           .then((r) => r.messages ?? [])
           .catch(() => [] as InboxMessage[]);
-        const [weekly, tx] = await Promise.all([
-          getWeekly(ac.signal),
-          getTransactions(25, ac.signal),
-        ]);
+        const tx = await getTransactions(500, ac.signal);
         setState({
           status: "ready",
-          weeks: weekly.weeks ?? [],
           transactions: tx.transactions ?? [],
           inbox: await inboxPromise,
         });
@@ -50,42 +60,106 @@ export default function DashboardPage() {
     return () => ac.abort();
   }, []);
 
-  const currency =
-    state.status === "ready"
-      ? state.transactions[0]?.currency ?? "USD"
-      : "USD";
+  const txns = useMemo(
+    () => (state.status === "ready" ? state.transactions : []),
+    [state],
+  );
+  const currency = txns[0]?.currency ?? "USD";
+
+  // budgets stay anchored to the latest full month, independent of the picker
+  const monthBuckets = useMemo(() => buildBuckets(txns, "month"), [txns]);
+  const seriesBuckets = useMemo(
+    () => buildBuckets(txns, period, category),
+    [txns, period, category],
+  );
+  const categories = useMemo(() => categoriesPresent(txns), [txns]);
+
+  // the period the detail widgets focus on (defaults to the most recent)
+  const effectiveKey = selectedKey || seriesBuckets.at(-1)?.key || "";
+  const selectedIdx = seriesBuckets.findIndex((b) => b.key === effectiveKey);
+  const selected = selectedIdx >= 0 ? seriesBuckets[selectedIdx] : undefined;
+  const prev = selectedIdx > 0 ? seriesBuckets[selectedIdx - 1] : undefined;
+  const periods = useMemo(
+    () => [...seriesBuckets].reverse().map((b) => ({ key: b.key, fullLabel: b.fullLabel })),
+    [seriesBuckets],
+  );
+  const periodTxns = useMemo(
+    () =>
+      txns.filter(
+        (t) =>
+          keyOf(t.date, period) === effectiveKey &&
+          (category === "all" || t.category.split(".")[0] === category),
+      ),
+    [txns, period, effectiveKey, category],
+  );
+
+  function changeGranularity(g: Period) {
+    setPeriod(g);
+    setSelectedKey(""); // snap back to the most recent period at the new granularity
+  }
 
   return (
     <AppShell activeHref="/dashboard">
-      <div className="mx-auto w-full max-w-6xl px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-          <p className="mt-1 text-sm text-[color:var(--color-fg-muted)]">
-            Your spending at a glance.
-          </p>
+      <div className="mx-auto w-full max-w-[1400px] px-6 py-8">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+            <p className="mt-1 text-sm text-[color:var(--color-fg-muted)]">
+              Your money at a glance, with what to do next.
+            </p>
+          </div>
+          {state.status === "ready" && txns.length > 0 ? (
+            <DashboardFilters
+              period={period}
+              setPeriod={changeGranularity}
+              periods={periods}
+              selectedKey={effectiveKey}
+              setSelectedKey={setSelectedKey}
+              category={category}
+              setCategory={setCategory}
+              categories={categories}
+            />
+          ) : null}
         </div>
 
         {state.status === "loading" ? <DashboardSkeleton /> : null}
         {state.status === "error" ? <Unavailable /> : null}
         {state.status === "ready" ? (
-          state.weeks.length === 0 && state.transactions.length === 0 ? (
+          txns.length === 0 ? (
             <Empty />
           ) : (
-            <div className="flex flex-col gap-6">
-              <StatCards
-                weeks={state.weeks}
-                txCount={state.transactions.length}
-                currency={currency}
-              />
-              <SpendChart weeks={state.weeks} currency={currency} />
-              <div className="grid gap-6 lg:grid-cols-2">
-                <CategoryBreakdown weeks={state.weeks} currency={currency} />
-                <div className="flex flex-col gap-6">
-                  <Inbox messages={state.inbox} />
-                  <TransactionsList transactions={state.transactions} />
-                </div>
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="flex flex-col gap-5"
+            >
+              <KpiRow selected={selected} prev={prev} granularity={period} currency={currency} />
+              <InsightsPanel txns={txns} />
+              <div className="grid gap-5 lg:grid-cols-2">
+                <TrendChart
+                  buckets={seriesBuckets}
+                  period={period}
+                  currency={currency}
+                  selectedKey={effectiveKey}
+                  onSelect={setSelectedKey}
+                />
+                <BudgetProgress monthBuckets={monthBuckets} currency={currency} />
               </div>
-            </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <CategoryBreakdown byCategory={selected?.byCategory ?? {}} currency={currency} />
+                <IncomeExpenses buckets={seriesBuckets} currency={currency} />
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <UpcomingBills currency={currency} />
+                <SavingsGoals currency={currency} />
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <LargestPurchases txns={periodTxns} currency={currency} />
+                <TransactionsList transactions={periodTxns} />
+              </div>
+              <Inbox messages={state.inbox} />
+            </motion.div>
           )
         ) : null}
       </div>
@@ -95,19 +169,16 @@ export default function DashboardPage() {
 
 function DashboardSkeleton() {
   return (
-    <div className="flex animate-pulse flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="flex animate-pulse flex-col gap-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-24 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40"
-          />
+          <div key={i} className={`${CARD} h-24`} />
         ))}
       </div>
-      <div className="h-72 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="h-64 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40" />
-        <div className="h-64 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40" />
+      <div className={`${CARD} h-28`} />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className={`${CARD} h-64`} />
+        <div className={`${CARD} h-64`} />
       </div>
     </div>
   );
@@ -115,13 +186,13 @@ function DashboardSkeleton() {
 
 function Empty() {
   return (
-    <div className="rounded-2xl border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40 p-12 text-center">
+    <div className={`${CARD} p-12 text-center`}>
       <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[color:var(--color-accent)]/10 text-[color:var(--color-accent)]">
         <Wallet className="h-6 w-6" />
       </div>
       <h2 className="mt-3 text-base font-semibold">No data yet</h2>
       <p className="mx-auto mt-1 max-w-md text-sm text-[color:var(--color-fg-muted)]">
-        Once transactions load, spending shows up here.
+        Once transactions load, your dashboard fills in here.
       </p>
       <Link
         href="/chat"
@@ -135,7 +206,7 @@ function Empty() {
 
 function Unavailable() {
   return (
-    <div className="rounded-2xl border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)]/40 p-12 text-center">
+    <div className={`${CARD} p-12 text-center`}>
       <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[color:var(--color-surface-hi)] text-[color:var(--color-fg-muted)]">
         <Wallet className="h-6 w-6" />
       </div>
