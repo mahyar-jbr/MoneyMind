@@ -37,6 +37,7 @@ from agent.tools.propose_intervention import (
     ProposeInterventionInput,
     propose_intervention,
 )
+from agent.tools.abandon_goal import AbandonGoalInput, abandon_goal
 from agent.tools.forget_memory import ForgetMemoryInput, forget_memory
 from agent.tools.list_goals import ListGoalsInput, list_goals
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
@@ -175,6 +176,30 @@ _DESCRIPTIONS = {
         "goal_id; you can pass it to check_goal_pace in the same turn "
         "or list it back to the user in your reply."
     ),
+    "abandon_goal": (
+        "Mark one of the user's active goals as abandoned. Use when the "
+        "user wants to give up on / drop / cancel / forget a goal: "
+        "'forget the Japan trip', 'I gave up on the laptop goal', "
+        "'cancel my emergency fund'. Status flip (active → abandoned), "
+        "NOT a delete — the goal stays in Atlas as an audit trail and "
+        "list_goals's default status='active' filter hides it from the "
+        "dashboard. Two call patterns mirror forget_memory: "
+        "(A) FIRST request: pass query=<user's own words>. Tool "
+        "title-matches against the user's active goals (stopwords like "
+        "'the' / 'my' / 'goal' ignored). Exactly one match → flips and "
+        "returns the title. Multiple matches → needs_confirmation=True "
+        "with a candidate list; ask 'which one — Japan trip or "
+        "Emergency fund?' before re-calling. Zero matches → returns "
+        "active_goal_titles so you can tell the user what's actually "
+        "on file. "
+        "(B) USER CONFIRMED a previous needs_confirmation question: "
+        "pass goal_id=<the id from the candidates list>. Flips directly. "
+        "Three result shapes: (1) abandoned=True — name the title in "
+        "your reply ('Got it — Japan trip is off the list.'). "
+        "(2) needs_confirmation=True — quote the candidates and ask. "
+        "(3) abandoned=False, needs_confirmation=False — surface "
+        "active_goal_titles in your reply."
+    ),
     "propose_intervention": (
         "Propose an intervention the user can accept, decline, or modify: "
         "cap (limit spending in a category), reminder (Sunday meal-prep "
@@ -272,11 +297,11 @@ def _wrap_tool(
 
 
 async def _build_tools() -> list[BaseTool]:
-    """Build the agent's tool list: 14 native tools + MongoDB MCP tools (R1).
+    """Build the agent's tool list: 15 native tools + MongoDB MCP tools (R1).
 
     MCP tools come from a Node subprocess (`npx mongodb-mcp-server`) lazily
     spawned on first call. If the subprocess fails to start, get_mcp_tools()
-    returns [] and the agent still boots with the 14 native tools.
+    returns [] and the agent still boots with the 15 native tools.
     """
     native: list[BaseTool] = [
         _wrap_tool(query_transactions, name="query_transactions", input_model=QueryTransactionsInput),
@@ -287,6 +312,7 @@ async def _build_tools() -> list[BaseTool]:
         _wrap_tool(update_user_context, name="update_user_context", input_model=UpdateUserContextInput),
         _wrap_tool(write_goal, name="write_goal", input_model=WriteGoalInput),
         _wrap_tool(list_goals, name="list_goals", input_model=ListGoalsInput),
+        _wrap_tool(abandon_goal, name="abandon_goal", input_model=AbandonGoalInput),
         _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
         _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),
         _wrap_tool(respond_to_intervention, name="respond_to_intervention", input_model=RespondToInterventionInput),
