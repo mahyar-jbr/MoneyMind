@@ -13,8 +13,8 @@
 | R2 | ✅ **done 2026-06-05** — Vertex AI migration verified live in PROD. `moneymind-agent@moneymind-hack.iam` SA, `roles/aiplatform.user`, key as `GOOGLE_APPLICATION_CREDENTIALS_JSON_B64` (base64 — raw JSON corrupted PEM newlines). Import fix: `langchain_google_vertexai.chat_models` submodule (cold-import 236s → 2.1s). 222 tests, ruff clean. | @mahyar | — |
 | R4 | ✅ **done 2026-06-05** — Live URLs: frontend https://money-mind-seven.vercel.app (Vercel, Next 15) + backend+agent https://moneymind-production-2a7e.up.railway.app (Railway, single Docker container). End-to-end verified: Clerk sign-in → dashboard renders $17,380/26-weeks → chat returns live Vertex Gemini reply. | @mahyar | — |
 | R-budget | ✅ **done 2026-06-06** — GCP budget alert set on `moneymind-hack` at $300 with 50/90/100% triggers. | @mahyar | — |
-| R1 | ✅ **done 2026-06-06** — MongoDB MCP server wired as first-class tool source. `agent/mcp_integration/client.py` lazy-spawns `npx mongodb-mcp-server@latest --readOnly` on first `get_mcp_tools()`; MCP tools get `mongo_` prefix and join the native tools in `create_react_agent(tools=)` (12 native at R1 write; grew to **15 native** as of 2026-06-08 — V1 added `write_goal` + `list_goals` + `abandon_goal`). `_build_tools` + `build_graph` are async; cascaded through `arun_chat`, `stream_chat`, 14 test_graph callsites. `--readOnly` (camelCase) hardcoded + enforced by `test_server_config_includes_read_only_flag` — kebab-case form was caught failing in Railway logs and fixed in `48f23e6`. Graceful fallback: spawn failure returns `[]`, agent still boots with the native tools. `MONGODB_MCP_DISABLE=1` env-var kill switch wired in `e62fe51` in case the upstream `mongodb-mcp-server` package regresses (it currently ships with a `Cannot find module 'vary'` transitive bug; native tools cover everything end-to-end). conftest.py autouse stubs `get_mcp_tools` to `[]` in graph tests. README + system prompt updated. | @mahyar | — |
-| R-infra | ✅ **done 2026-06-06 EOD** — Production-correctness fixes caught during live end-to-end testing: (1) **lifespan warmup** in `agent/serve.py` so the heavy graph import (langchain_google_vertexai + langgraph + 15 tool modules as of 2026-06-08, 30–240s cold) runs on a background thread during FastAPI's lifespan startup; uvicorn announces 'ready' in <1s and Railway healthcheck no longer risks restart-loop. (2) **`astream_chat`** added in `agent/graphs/main.py`; serve.py's async `/chat` handler awaits it via `async for` — every request stays on a single event loop, motor cursors no longer cross loops (`RuntimeError: Event loop is closed` on second-message-onwards reproduced + fixed). (3) Vercel `/api/chat` route now pipes upstream through an explicit `ReadableStream` so chunks flush instead of buffering; `X-Accel-Buffering: no` + `dynamic=force-dynamic` + `maxDuration=300` set. (4) Frontend `useEffect` unmount cleanup that called `abortRef.current?.abort()` removed — it was canceling in-flight chat requests at ~1.85s in prod. | @mahyar | — |
+| R1 | ✅ **done 2026-06-06** — MongoDB MCP server wired as first-class tool source. `agent/mcp_integration/client.py` lazy-spawns `npx mongodb-mcp-server@latest --readOnly` on first `get_mcp_tools()`; MCP tools get `mongo_` prefix and join the native tools in `create_react_agent(tools=)` (12 native at R1 write; grew to **18 native** as of 2026-06-08 — V1 added `write_goal` + `list_goals` + `abandon_goal`, V6 added `set_budget` + `list_budgets` + `abandon_budget`). `_build_tools` + `build_graph` are async; cascaded through `arun_chat`, `stream_chat`, 14 test_graph callsites. `--readOnly` (camelCase) hardcoded + enforced by `test_server_config_includes_read_only_flag` — kebab-case form was caught failing in Railway logs and fixed in `48f23e6`. Graceful fallback: spawn failure returns `[]`, agent still boots with the native tools. `MONGODB_MCP_DISABLE=1` env-var kill switch wired in `e62fe51` in case the upstream `mongodb-mcp-server` package regresses (it currently ships with a `Cannot find module 'vary'` transitive bug; native tools cover everything end-to-end). conftest.py autouse stubs `get_mcp_tools` to `[]` in graph tests. README + system prompt updated. | @mahyar | — |
+| R-infra | ✅ **done 2026-06-06 EOD** — Production-correctness fixes caught during live end-to-end testing: (1) **lifespan warmup** in `agent/serve.py` so the heavy graph import (langchain_google_vertexai + langgraph + 18 tool modules as of 2026-06-08, 30–240s cold) runs on a background thread during FastAPI's lifespan startup; uvicorn announces 'ready' in <1s and Railway healthcheck no longer risks restart-loop. (2) **`astream_chat`** added in `agent/graphs/main.py`; serve.py's async `/chat` handler awaits it via `async for` — every request stays on a single event loop, motor cursors no longer cross loops (`RuntimeError: Event loop is closed` on second-message-onwards reproduced + fixed). (3) Vercel `/api/chat` route now pipes upstream through an explicit `ReadableStream` so chunks flush instead of buffering; `X-Accel-Buffering: no` + `dynamic=force-dynamic` + `maxDuration=300` set. (4) Frontend `useEffect` unmount cleanup that called `abortRef.current?.abort()` removed — it was canceling in-flight chat requests at ~1.85s in prod. | @mahyar | — |
 | R8 | **Devpost draft** — walk form, save draft, send team invites. Independent of R1/R2/R4. | @mahyar | XS |
 | R9 | **Demo video: target 2:00-2:30**, not 90s. Cap is 3 min. Extra time = MCP-firing-on-camera + vector recall + intervention loop + memory beat. Independent. | @kasra | XS |
 
@@ -290,42 +290,71 @@ after: memories visible=0, soft-deleted=1
 
 ---
 
-### V6 — Real Budgets: per-category caps the agent can read + dashboard can render
+### V6 — Real Budgets: set + list + abandon via chat or dashboard
 
-**Current state (verified 2026-06-08):**
-- ✅ `BudgetProgress` widget already exists in [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) and renders correctly — the "used" side is computed from real monthly spend via `buildBuckets`.
-- ❌ The "limits" side reads from `DEMO_BUDGETS` (hardcoded array of 5 categories in [`frontend/lib/demo.ts`](frontend/lib/demo.ts)). Widget is SAMPLE-tagged.
-- ❌ No `budgets` Atlas collection.
-- ❌ No agent tool to set or read budgets. `propose_intervention` can suggest `type="cap"` (capping a category) but there's no place to persist the accepted cap.
-- ❌ No backend `/budgets` route.
+**✅ DONE 2026-06-08** — Full stack landed same night as V1. Verified live against prod URL: agent's "Got it — food capped at $500/month" reply now shows up as a real progress bar on the dashboard (Food $175 / $500 with the bar at ~35%). Last SAMPLE pill on the dashboard is GONE; `frontend/lib/demo.ts` deleted entirely.
 
-**Why this matters:** the slide-8 `propose_intervention` flow includes a "cap" intervention type ("Hold food delivery to $300/wk"). The agent can propose it, the user can accept it via the intervention card, but the accepted cap goes nowhere — there's nothing to persist it against, nothing to read it back from, nothing to compare next-week spend against. V6 closes that loop.
+**What shipped:**
+- NEW [`agent/tools/set_budget.py`](agent/tools/set_budget.py) — UPSERT by `(user_id, category, status="active")`. Single tool for create + edit ("cap food at $500" then "actually make it $400" → same doc, limit updated, `created_at` preserved, `updated_at` bumped, returns `updated=True`). Category normalized to top-level word ("Food Delivery" / "food.delivery" / "FOOD" → "food"); without this, capping "food" then "food delivery" would silently create two competing docs on the same dashboard row.
+- NEW [`agent/tools/list_budgets.py`](agent/tools/list_budgets.py) — find with default `status="active"`, sorted by category for stable UI ordering. `status="all"` includes abandoned for "show me everything" requests.
+- NEW [`agent/tools/abandon_budget.py`](agent/tools/abandon_budget.py) — status flip (active→abandoned), NOT a delete. THREE call paths: `category=` (clean name, hot path), `query=` (fuzzy word-overlap with stopwords like "forget"/"cap"/"my" stripped), `budget_id=` (confirmation follow-up). user_id isolation enforced on all three paths.
+- NEW [`backend/app/api/budgets.py`](backend/app/api/budgets.py) — single Clerk-authed `GET /budgets` route with status filter. Serialization mirrors `goals.py` / `interventions.py`. No POST — write flow is agent-only by design (forces the demo through chat).
+- NEW [`frontend/app/api/budgets/route.ts`](frontend/app/api/budgets/route.ts) — Vercel proxy mirroring `/api/goals` pattern.
+- [`agent/graphs/main.py`](agent/graphs/main.py) — all 3 tools registered (15 → 18 native total).
+- [`agent/prompts/system.py`](agent/prompts/system.py) — new **BUDGETS** section + **ACCEPTED CAP INTERVENTION → MATERIALIZE WITH set_budget** rule (closes the slide-8 loop end-to-end: user accepts cap intervention card → `respond_to_intervention` records it → `set_budget` materializes the cap → `BudgetProgress` widget renders it). Disambiguation rule added: budgets ≠ goals ≠ memories.
+- [`backend/app/main.py`](backend/app/main.py) — `budgets.router` registered.
+- [`frontend/middleware.ts`](frontend/middleware.ts) — `/api/budgets(.*)` added to Clerk allowlist.
+- [`frontend/lib/types.ts`](frontend/lib/types.ts) — `Budget` + `BudgetsResponse` types.
+- [`frontend/lib/api.ts`](frontend/lib/api.ts) — `getBudgets(status)` helper.
+- [`frontend/components/dashboard/widgets.tsx`](frontend/components/dashboard/widgets.tsx) — `BudgetProgress` now consumes real `Budget[]` prop. SAMPLE pill **removed**. Empty-state CTA: *"Ask MoneyMind: 'Cap my food spending at $500 a month.'"*
+- [`frontend/app/dashboard/page.tsx`](frontend/app/dashboard/page.tsx) — fetches `getBudgets("active")` in parallel with goals + inbox; pipes to widget. Best-effort fetch (failure → empty array).
+- **DELETED** [`frontend/lib/demo.ts`](frontend/lib/demo.ts) — every `DEMO_*` constant is now real V1/V6 data; file no longer imported anywhere. Zero SAMPLE-tagged surfaces remain on the dashboard.
 
-**Scope (minimum for a real demo beat):**
-- New `budgets` collection. Doc shape: `{user_id, category, limit, period: "month"|"week", created_at, updated_at}`. One doc per (user_id, category) — `set_budget` upserts.
-- New agent tools:
-  - `set_budget(category, limit, period)` — upsert into `budgets`. Called by the agent when the user accepts a cap intervention OR when the user says "cap my food at $300/month".
-  - `list_budgets()` — returns the user's current budgets so the agent can compare them against real spend.
-- Backend: `GET /budgets` Clerk-authed route returning the user's budget list.
-- Frontend: Vercel proxy `/api/budgets`; swap `DEMO_BUDGETS` import in `BudgetProgress` for a `useBudgets()` hook that fetches the real list. Empty state when no budgets are set ("Ask MoneyMind to cap a category"). Remove SAMPLE pill from the widget.
-- Wire `respond_to_intervention`: when a `type="cap"` intervention's response is "accepted", auto-call `set_budget` with the proposed params.
+**Tests — 34 new hermetic tests, all pass:**
+- [`agent/tests/test_set_budget.py`](agent/tests/test_set_budget.py) — 11: first-insert, persisted-shape contract, 4 category-normalization variants, update path preserves `created_at` + `budget_id`, multi-word user input ("Food Delivery") updates existing "food" doc, abandoned-doesn't-block-reinsert, user_id isolation tripwire, 4 validation tripwires.
+- [`agent/tests/test_list_budgets.py`](agent/tests/test_list_budgets.py) — 7: default active-only, alphabetical sort, status='all' / 'abandoned' filters, user_id isolation, unknown-user empty, 2 validation.
+- [`agent/tests/test_abandon_budget.py`](agent/tests/test_abandon_budget.py) — 16: all three call paths verified, category normalization, no-match returns `active_categories`, multi-match `needs_confirmation`, all-stopword fallthrough, idempotency on already-abandoned, invalid ObjectId, mutually-exclusive params, **user_id isolation tripwires for BOTH `category` AND `budget_id` paths**, validation.
 
-**Files to touch:** `agent/tools/set_budget.py` (NEW), `agent/tools/list_budgets.py` (NEW), `agent/graphs/main.py` (register 2 tools + descriptions), `agent/prompts/system.py` (one paragraph on cap-acceptance → set_budget), `agent/tools/respond_to_intervention.py` (auto-set_budget on cap accept), `backend/app/api/budgets.py` (NEW, GET only), `frontend/app/api/budgets/route.ts` (NEW Vercel proxy), `frontend/lib/api.ts` (`getBudgets` helper), `frontend/components/dashboard/widgets.tsx` (`BudgetProgress` consumes hook), `frontend/lib/demo.ts` (drop `DEMO_BUDGETS`).
+**Live trace verified end-to-end (real Atlas, u_482):**
+```
+T1 "Cap my food spending at $500 a month"
+   → set_budget(category="food", limit=500)
+   → reply: "Got it — food capped at $500/month."
+   → Atlas: 1 active food budget @ $500
 
-**Pattern reference:** mirror V1 (Goals) almost exactly — same tool/route/widget shape. The respond_to_intervention auto-set wrinkle is the only novel piece.
+T2 "what are my budgets?"
+   → list_budgets()
+   → reply: cites food $500
 
-**Effort:** 4-6h for @mahyar (full-stack, same pattern as V1 + V3 already shipped).
-**Owner:** @mahyar
-**Demo value:** MEDIUM — closes the cap-intervention loop end-to-end. If V1 ships, V6 stops being the only SAMPLE pill left on the dashboard.
-**Risk:** LOW — additive only, no existing tool changes (respond_to_intervention gains a one-line side effect).
-**AC:**
-- [ ] User accepts a `type="cap"` intervention → backend logs `set_budget` writing a doc to `atlas.budgets`.
-- [ ] User says "cap my food spending at $300 per month" → agent calls `set_budget(category="food", limit=300, period="month")`.
-- [ ] Dashboard `BudgetProgress` widget reads real budgets via `/api/budgets`; SAMPLE pill removed.
-- [ ] Empty state renders when no budgets exist ("Ask MoneyMind to cap a category" CTA).
-- [ ] Agent's reply on a "how am I doing?" question references budget caps when present.
+T3 "actually change food to $400"
+   → set_budget(category="food", limit=400, updated=True)
+   → reply: "Got it — food is now capped at $400/month."
+   → Atlas: SAME doc, limit now $400, created_at preserved
 
-**Recommendation:** **defer-post-hackathon** unless V1 and V4 land with hours to spare. The visual is already there (BudgetProgress renders fine with placeholders + SAMPLE tag); the missing piece is persistence. Don't block the submission on it.
+T4 "forget the food cap"
+   → abandon_budget(category="food")
+   → reply: "Got it — food cap is off."
+   → Atlas: status flipped active→abandoned, doc preserved
+```
+
+**Live prod verification (Mahyar's Clerk user, screenshot 2026-06-08):**
+- Chat: "Cap my food spending at $500 a month" → agent replies "Got it — food capped at $500/month."
+- Dashboard refresh → **BudgetProgress widget shows Food $175 / $500** with bar at ~35% (real spend / real cap).
+- Follow-up "what are my budgets set" → agent calls `list_budgets`, replies "You have an active budget of $500 per month for Food."
+
+**Two real bugs caught + fixed during build:**
+1. `_normalize_category("Food Delivery")` returned `"food delivery"` (no `.` to split on). Would have created duplicate budgets for the same top-level category. Fixed: collapse `.split(".")[0].split()[0]` so multi-word user input takes the first top-level token only. Same fix mirrored into `abandon_budget`'s category path so "forget the food delivery cap" finds the existing "food" budget.
+2. Test compared `created_at` for full equality but motor strips tzinfo + may truncate microseconds on Mongo roundtrip. Loosened to 1ms tolerance — tool behavior was correct, test was too strict.
+
+**AC results:**
+- [x] User says "cap my food spending at $500 a month" → agent calls `set_budget(category="food", limit=500, period="month")`.
+- [x] Dashboard `BudgetProgress` widget reads real budgets via `/api/budgets`; SAMPLE pill removed.
+- [x] Empty-state CTA renders when no budgets exist.
+- [x] Agent's reply on "what are my budgets" cites the actual cap from Atlas.
+- [x] **DEFERRED to post-submission:** auto-calling `set_budget` when user accepts a `type="cap"` intervention via the card. The prompt rule for it exists; the explicit wiring in `respond_to_intervention` is a 5-line follow-up. Doesn't block any demo path — the chat path is the demo beat.
+
+**Owner:** @mahyar (full stack, same head as V1)
+**Recommendation:** SHIPPED — closes V6 and zeros out the last SAMPLE pill on the dashboard. Every visible widget is now backed by real Atlas data.
 
 ---
 
@@ -338,8 +367,8 @@ With ~5 days to submission and today already burned on a marathon bug-fix:
 | ✅ | ~~V2 dashboard polish~~ | **DONE 2026-06-07** — PR #52 + post-merge demo-readiness fixes + 2026-06-08 scope cut (NetWorth/Cash/UpcomingBills dropped); every visible KPI is real |
 | ✅ | ~~V1 goals (write + list + abandon + dashboard widget)~~ | **DONE 2026-06-08** — write_goal + list_goals + abandon_goal tools, GET /goals route, SavingsGoals swapped to real data, empty-state CTA, 37 hermetic tests, full slide-7 flow live-verified on prod URL |
 | ✅ | ~~V3 memory delete~~ | **DONE 2026-06-06 EOD** — soft-delete + confidence-gated single-turn; live-verified on Atlas (visible 1→0, soft-deleted 0→1) |
-| 1 | V4 Part A CSV upload | Team discussion now that V1+V2+V3 are all in |
-| 2 | V6 real Budgets | @mahyar full stack; mirrors V1 pattern; closes the cap-intervention loop end-to-end |
+| ✅ | ~~V6 real Budgets~~ | **DONE 2026-06-08** — set_budget upsert + list_budgets + abandon_budget tools, GET /budgets route, BudgetProgress swapped to real data, 34 hermetic tests, live-verified on prod (Food $175 / $500 bar rendering). demo.ts deleted entirely. Zero SAMPLE pills left on the dashboard. |
+| 1 | V4 Part A CSV upload | Team discussion now that V1+V2+V3+V6 are all in |
 
-**Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items. **V6 is also defer-by-default** — the visual is already on the dashboard (BudgetProgress + SAMPLE tag); only persistence is missing. Don't block the submission on it; ship if time-after-V1.
+**Skip in this window:** V4 Part B (PDF parse) — risk > value at hackathon scope. V4 Part C (edit UI) — not what the pitch is about. Note both as post-hackathon roadmap, not as scoped items.
 
