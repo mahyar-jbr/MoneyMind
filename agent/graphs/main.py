@@ -37,8 +37,10 @@ from agent.tools.propose_intervention import (
     ProposeInterventionInput,
     propose_intervention,
 )
+from agent.tools.abandon_budget import AbandonBudgetInput, abandon_budget
 from agent.tools.abandon_goal import AbandonGoalInput, abandon_goal
 from agent.tools.forget_memory import ForgetMemoryInput, forget_memory
+from agent.tools.list_budgets import ListBudgetsInput, list_budgets
 from agent.tools.list_goals import ListGoalsInput, list_goals
 from agent.tools.query_transactions import QueryTransactionsInput, query_transactions
 from agent.tools.recall_memory import RecallMemoryInput, recall_memory
@@ -55,6 +57,7 @@ from agent.tools.update_user_context import (
     UpdateUserContextInput,
     update_user_context,
 )
+from agent.tools.set_budget import SetBudgetInput, set_budget
 from agent.tools.write_goal import WriteGoalInput, write_goal
 from agent.tools.write_memory import WriteMemoryInput, write_memory
 
@@ -200,6 +203,51 @@ _DESCRIPTIONS = {
         "(3) abandoned=False, needs_confirmation=False — surface "
         "active_goal_titles in your reply."
     ),
+    "set_budget": (
+        "Upsert a per-category monthly spending cap. Use when the user "
+        "explicitly states a limit: 'cap food at $500 a month', 'limit "
+        "DoorDash to $300', 'I want to spend no more than $150 on "
+        "coffee'. Also used internally when the user accepts a `cap` "
+        "intervention proposed via propose_intervention — materialize "
+        "the cap by calling set_budget with the proposed category + "
+        "limit. category is the top-level bucket (food / shopping / "
+        "transport / subscriptions / health / ...); 'food delivery' → "
+        "'food'. limit is the dollar amount, > 0. period defaults to "
+        "'month'. Single tool covers both create AND edit — re-calling "
+        "with a new limit for the same category UPDATES the existing "
+        "active budget (returns updated=True). One active budget per "
+        "category at a time."
+    ),
+    "list_budgets": (
+        "List the user's active per-category spending caps. Call this "
+        "when the user asks about caps/budgets ('what are my caps?', "
+        "'am I over budget on food?') OR before proposing a cap "
+        "intervention so you can check whether one already exists for "
+        "that category (avoid double-proposing). Defaults to active "
+        "budgets only — pass status='all' if the user explicitly asks "
+        "about abandoned ones. Returns category + limit + period so the "
+        "agent can name actual numbers in its reply ('You've capped "
+        "food at $500/month and shopping at $300/month.')."
+    ),
+    "abandon_budget": (
+        "Remove one of the user's active spending caps. Status flip "
+        "(active → abandoned), NOT a delete. Use when the user wants to "
+        "drop / cancel / forget a cap: 'forget the food cap', 'cancel "
+        "my shopping budget', 'remove the coffee limit'. Three call "
+        "patterns (pick ONE per call): "
+        "(A) query=<user's words> → fuzzy word-overlap match against "
+        "active budgets' categories, stopwords ('forget', 'cap', 'my', "
+        "etc.) stripped. Exactly one match → flips. Multiple → "
+        "needs_confirmation=True with candidates; ask which one. Zero "
+        "→ active_categories returned so you can tell the user what's "
+        "actually on file. "
+        "(B) category=<clean category name> → exact match. Use when "
+        "the user named the category cleanly ('remove my food cap' → "
+        "category='food'). Faster and more reliable than query. "
+        "(C) budget_id=<id from previous needs_confirmation> → direct "
+        "flip. "
+        "Reply naming what you removed: 'Got it — food cap is off.'"
+    ),
     "propose_intervention": (
         "Propose an intervention the user can accept, decline, or modify: "
         "cap (limit spending in a category), reminder (Sunday meal-prep "
@@ -297,11 +345,11 @@ def _wrap_tool(
 
 
 async def _build_tools() -> list[BaseTool]:
-    """Build the agent's tool list: 15 native tools + MongoDB MCP tools (R1).
+    """Build the agent's tool list: 18 native tools + MongoDB MCP tools (R1).
 
     MCP tools come from a Node subprocess (`npx mongodb-mcp-server`) lazily
     spawned on first call. If the subprocess fails to start, get_mcp_tools()
-    returns [] and the agent still boots with the 15 native tools.
+    returns [] and the agent still boots with the 18 native tools.
     """
     native: list[BaseTool] = [
         _wrap_tool(query_transactions, name="query_transactions", input_model=QueryTransactionsInput),
@@ -314,6 +362,9 @@ async def _build_tools() -> list[BaseTool]:
         _wrap_tool(list_goals, name="list_goals", input_model=ListGoalsInput),
         _wrap_tool(abandon_goal, name="abandon_goal", input_model=AbandonGoalInput),
         _wrap_tool(check_goal_pace, name="check_goal_pace", input_model=CheckGoalPaceInput),
+        _wrap_tool(set_budget, name="set_budget", input_model=SetBudgetInput),
+        _wrap_tool(list_budgets, name="list_budgets", input_model=ListBudgetsInput),
+        _wrap_tool(abandon_budget, name="abandon_budget", input_model=AbandonBudgetInput),
         _wrap_tool(propose_intervention, name="propose_intervention", input_model=ProposeInterventionInput),
         _wrap_tool(respond_to_intervention, name="respond_to_intervention", input_model=RespondToInterventionInput),
         _wrap_tool(log_outcome, name="log_outcome", input_model=LogOutcomeInput),

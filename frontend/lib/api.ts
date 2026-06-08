@@ -3,6 +3,7 @@ import type {
   TransactionsResponse,
   InboxResponse,
   GoalsResponse,
+  BudgetsResponse,
 } from "./types";
 
 // these hit our own /api proxy routes, which add auth and call the backend
@@ -39,5 +40,16 @@ export async function getGoals(
 ): Promise<GoalsResponse> {
   const res = await fetch(`/api/goals?status=${status}`, { signal });
   if (!res.ok) throw new Error(`goals failed: ${res.status}`);
+  return res.json();
+}
+
+// V6 — Budgets read path. status defaults to "active" so abandoned budgets
+// are hidden from the dashboard render.
+export async function getBudgets(
+  status: "active" | "abandoned" | "all" = "active",
+  signal?: AbortSignal,
+): Promise<BudgetsResponse> {
+  const res = await fetch(`/api/budgets?status=${status}`, { signal });
+  if (!res.ok) throw new Error(`budgets failed: ${res.status}`);
   return res.json();
 }

@@ -58,3 +58,19 @@ export type GoalsResponse = {
   user_id: string;
   goals: Goal[];
 };
+
+export type Budget = {
+  id: string;
+  user_id: string;
+  category: string;
+  limit: number;
+  period: "month";
+  status: "active" | "abandoned";
+  created_at: string;
+  updated_at: string;
+};
+
+export type BudgetsResponse = {
+  user_id: string;
+  budgets: Budget[];
+};

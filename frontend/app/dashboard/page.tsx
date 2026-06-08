@@ -19,14 +19,14 @@ import {
   SavingsGoals,
   TrendChart,
 } from "@/components/dashboard/widgets";
-import { getGoals, getInbox, getTransactions } from "@/lib/api";
+import { getBudgets, getGoals, getInbox, getTransactions } from "@/lib/api";
 import {
   buildBuckets,
   categoriesPresent,
   keyOf,
   type Period,
 } from "@/lib/analytics";
-import type { Goal, InboxMessage, Transaction } from "@/lib/types";
+import type { Budget, Goal, InboxMessage, Transaction } from "@/lib/types";
 
 type State =
   | { status: "loading" }
@@ -36,6 +36,7 @@ type State =
       transactions: Transaction[];
       inbox: InboxMessage[];
       goals: Goal[];
+      budgets: Budget[];
     };
 
 export default function DashboardPage() {
@@ -57,12 +58,16 @@ export default function DashboardPage() {
         const goalsPromise = getGoals("active", ac.signal)
           .then((r) => r.goals ?? [])
           .catch(() => [] as Goal[]);
+        const budgetsPromise = getBudgets("active", ac.signal)
+          .then((r) => r.budgets ?? [])
+          .catch(() => [] as Budget[]);
         const tx = await getTransactions(500, ac.signal);
         setState({
           status: "ready",
           transactions: tx.transactions ?? [],
           inbox: await inboxPromise,
           goals: await goalsPromise,
+          budgets: await budgetsPromise,
         });
       } catch {
         if (!ac.signal.aborted) setState({ status: "error" });
@@ -155,7 +160,7 @@ export default function DashboardPage() {
                   selectedKey={effectiveKey}
                   onSelect={setSelectedKey}
                 />
-                <BudgetProgress monthBuckets={monthBuckets} currency={currency} />
+                <BudgetProgress budgets={state.budgets} monthBuckets={monthBuckets} currency={currency} />
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
                 <CategoryBreakdown byCategory={selected?.byCategory ?? {}} currency={currency} />

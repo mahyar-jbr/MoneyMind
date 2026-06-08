@@ -19,10 +19,9 @@ import {
   pctChange,
   rankCategories,
 } from "@/lib/analytics";
-import type { Goal, Transaction } from "@/lib/types";
+import type { Budget, Goal, Transaction } from "@/lib/types";
 import { formatCategory, formatCurrency, formatDate } from "@/lib/dashboard";
 import { categoryIcon } from "@/lib/categories";
-import { DEMO_BUDGETS } from "@/lib/demo";
 
 export const CARD =
   "rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[color:var(--color-surface-hi)]/60 to-[color:var(--color-surface)]/40 shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_24px_60px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl";
@@ -465,10 +464,17 @@ export function CategoryBreakdown({
 
 /* ---------- Budgets ---------- */
 
+// V6 — backed by real /api/budgets data fetched in dashboard/page.tsx.
+// "limit" side is the user's set cap (atlas.budgets); "used" side comes
+// from the current month's real spend, aggregated to top-level category.
+// Empty state nudges the user toward chat where set_budget is the only
+// path to materialize a cap.
 export function BudgetProgress({
+  budgets,
   monthBuckets,
   currency,
 }: {
+  budgets: Budget[];
   monthBuckets: Bucket[];
   currency: string;
 }) {
@@ -480,22 +486,36 @@ export function BudgetProgress({
       usedByTop[k] = (usedByTop[k] ?? 0) + a;
     }
   }
+  if (budgets.length === 0) {
+    return (
+      <Panel title="Budget progress" icon={<Wallet className="h-4 w-4 text-[color:var(--color-accent)]" />}>
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <p className="text-sm text-[color:var(--color-fg-muted)]">
+            No caps set yet.
+          </p>
+          <p className="text-xs text-[color:var(--color-fg-muted)]">
+            Ask MoneyMind in chat: <span className="text-[color:var(--color-fg)]">&quot;Cap my food spending at $500 a month.&quot;</span>
+          </p>
+        </div>
+      </Panel>
+    );
+  }
   return (
-    <Panel title="Budget progress" icon={<Wallet className="h-4 w-4 text-[color:var(--color-accent)]" />} demo>
+    <Panel title="Budget progress" icon={<Wallet className="h-4 w-4 text-[color:var(--color-accent)]" />}>
       <ul className="flex flex-col gap-3.5">
-        {DEMO_BUDGETS.map((b) => {
+        {budgets.map((b) => {
           const used = usedByTop[b.category] ?? 0;
-          const pct = (used / b.limit) * 100;
+          const pct = b.limit > 0 ? (used / b.limit) * 100 : 0;
           const tone = pct >= 90 ? "rose" : pct >= 70 ? "warn" : "accent";
           return (
-            <li key={b.category}>
+            <li key={b.id}>
               <div className="mb-1 flex items-center justify-between text-sm">
                 <span className="capitalize">{formatCategory(b.category)}</span>
                 <span className="tabular-nums text-[color:var(--color-fg-muted)]">
                   {formatCurrency(used, currency, { compact: true })} / {formatCurrency(b.limit, currency, { compact: true })}
                 </span>
               </div>
-              <Bar pct={pct} tone={tone} />
+              <Bar pct={Math.min(100, pct)} tone={tone} />
             </li>
           );
         })}
