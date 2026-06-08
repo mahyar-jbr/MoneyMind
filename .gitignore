@@ -59,3 +59,21 @@ data/local/
 # Demo artifacts kept large
 demo/raw/
 *.mov
+
+# Bank / credit-card statements — PERSONAL DATA, never commit.
+# Kept locally for demo recording + V4 ingest testing, never shared.
+# If a teammate needs sample statements, share via a non-public channel.
+docs/Summary*.pdf
+docs/statement*.pdf
+docs/statements/
+*.statement.pdf
+# Common bank-export filename prefixes
+docs/amex*.pdf
+docs/chase*.pdf
+docs/rbc*.pdf
+docs/bmo*.pdf
+docs/td*.pdf
+docs/scotia*.pdf
+docs/cibc*.pdf
+docs/wells*.pdf
+docs/wf*.pdf

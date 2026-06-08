@@ -7,7 +7,8 @@
 Next.js 15 app on Vercel.
 
 - **Streaming chat** — plain-text chunked stream from the agent through a thin FastAPI proxy (see § "Chat wire format" below; decided 2026-05-27, not SSE).
-- **Dashboard** — weekly spend chart, goals, recent memories.
+- **Statement upload (PDF)** — `/ingest/statement` is a Server-Sent Events stream (see § "Statement-ingest wire format"). Deliberate exception to the chat wire format because the multi-phase pipeline (extract → categorize → save) needs progress checkpoints.
+- **Dashboard** — weekly spend chart, goals, budgets, recent memories.
 - **Intervention approval flow** — when the agent proposes a nudge, the UI surfaces an Accept / Decline / Modify card.
 - **Auth** — Clerk. One user for the demo; the schema is namespaced per `user_id` so it generalizes.
 
@@ -18,9 +19,9 @@ Components: shadcn/ui + Tailwind. Animation: Framer Motion.
 LangGraph ReAct loop on **Gemini 2.5 Flash via Vertex AI** (`langchain-google-vertexai` / `ChatVertexAI`).
 
 - **Graph** — `create_react_agent` over the native tools + MCP tools; `user_id` is carried in graph state via `InjectedState` so the LLM never sees or forges it. The agent decides for itself when to recall/write memory.
-- **Tools (11)** — see [BACKLOG.md](../BACKLOG.md#sprint-2--the-agent-may-27--jun-2) for the full list. Each is a Python function with a Pydantic schema; LangGraph routes calls.
+- **Tools (18 native)** — see [BACKLOG.md](../BACKLOG.md#sprint-2--the-agent-may-27--jun-2) for the full list. Each is a Python function with a Pydantic schema; LangGraph routes calls. Native count covers query/anomaly, memory (recall/write/forget), context, goals (write/list/abandon/check_pace), budgets (set/list/abandon), interventions (propose/respond), outcomes, reminders, and weekly summary.
 - **MCP client** — lazy-spawns the MongoDB MCP server as a stdio subprocess (`npx -y mongodb-mcp-server@latest --readOnly`) on the first chat turn and exposes its read tools as `mongo_*` for schema introspection and query tuning. Spawn failure degrades gracefully to the native tools.
-- **Weekly summary + reminders** — exposed as `POST /agent/run-weekly-summary` and `POST /agent/run-reminders`; output lands in the user's in-app inbox. For the hackathon these are triggered externally (manual curl per take); an automated scheduler is deferred post-freeze.
+- **Weekly summary + reminders** — exposed as `POST /agent/run-weekly-summary` and `POST /agent/run-reminders`; output lands in the user's in-app inbox (`inbox_messages`). For the hackathon these are triggered externally (manual curl per take); an automated scheduler is deferred post-freeze.
 
 ## Layer 3 — Data + Memory (`/backend` + Atlas)
 
@@ -28,12 +29,28 @@ A single MongoDB Atlas instance doing four jobs.
 
 | Job                | Collection(s)                                  | Notes                                                  |
 | ------------------ | ---------------------------------------------- | ------------------------------------------------------ |
-| Operational store  | `transactions`, `goals`, `interventions`, `outcomes`, `user_context` | Source of truth for app state                          |
+| Operational store  | `transactions`, `goals`, `budgets`, `user_context`, `interventions`, `outcomes`, `reminders`, `inbox_messages` | Source of truth for app state. `budgets` (per-category caps), `reminders` (one-off scheduled pings, status-indexed), and `inbox_messages` (weekly-summary + reminder delivery channel) added post-Sprint-2. |
 | Vector store       | `memories.embedding` (Voyage, written on insert) | HNSW index, 1024 dim, semantic recall; not auto-embed |
 | Memory store       | `langgraph_store` (managed by LangGraph)       | GA, persistent, namespaced per user                    |
 | Performance advisory | (via MCP server)                             | Agent uses the read-only MongoDB MCP server's tools to inspect + tune queries |
 
-FastAPI sits in front: handles auth verification (Clerk JWT), CSV ingestion, aggregations, and proxies the agent's streaming output. It also exposes the weekly-summary + reminder endpoints (`POST /agent/run-weekly-summary`, `POST /agent/run-reminders`) that the cron logic lives behind — those are currently triggered by authenticated manual POST (an automated scheduler is deferred post-freeze).
+FastAPI sits in front: handles auth verification (Clerk JWT), CSV ingestion, statement PDF ingestion (V4, SSE-streamed), aggregations, and proxies the agent's streaming output. It also exposes the weekly-summary + reminder endpoints (`POST /agent/run-weekly-summary`, `POST /agent/run-reminders`) that the cron logic lives behind — those are currently triggered by authenticated manual POST (an automated scheduler is deferred post-freeze).
+
+## Request flow
+
+```
+browser ─Clerk JWT→ Vercel /api/chat ─stream→ FastAPI /chat ─loopback→ Agent /chat
+                                                  │                         │
+                                          (Clerk verify, user_id)   (X-MoneyMind-User-Id)
+                                                                            │
+                                                                            ▼
+                                                            LangGraph ReAct loop
+                                                                            │
+                                                                            ▼
+                                                                  Atlas + Voyage
+```
+
+Vercel handles the browser request, verifies the Clerk JWT, and proxies to FastAPI on Railway. FastAPI re-verifies the JWT, resolves `user_id`, and POSTs to the agent on localhost:8001 (same Railway container, supervisord-managed) with `X-MoneyMind-User-Id` as a loopback header — the agent never sees a JWT and never trusts a `user_id` in the message body. The LangGraph ReAct loop carries `user_id` in graph state via `InjectedState` and tools resolve it from state, not from LLM-generated args. Every leg is a transparent pass-through stream; nothing buffers the full response.
 
 ## Data flow (the slide-10 picture in words)
 
@@ -44,12 +61,12 @@ USER ──▶ frontend ──▶ /chat ──▶ agent ──▶ tools ──�
                               writes memory
                                   │
                                   ▼
-                          outbound nudge ──▶ user inbox
+                          outbound nudge ──▶ inbox_messages
 ```
 
-1. **READ** — agent queries transactions + recalls memories + reads user context.
+1. **READ** — agent queries transactions + recalls memories + reads user context + checks budgets/goals.
 2. **REASON** — Gemini plans tool calls, executes them, reflects on the result.
-3. **WRITE** — agent writes a new memory (if confidence > 0.5) and any intervention proposal back to Atlas; nudge streams back to the user.
+3. **WRITE** — agent writes a new memory (if confidence > 0.5) and any intervention proposal back to Atlas; nudge streams back to the user. Weekly-summary and reminder cron paths write to `inbox_messages` instead of streaming.
 
 ## Backend route conventions
 
@@ -58,7 +75,7 @@ These apply to every FastAPI route. The reviewer Claude treats violations as blo
 1. **`user_id` is always required, never defaulted.** Until Clerk JWT resolution lands (#4a), every route accepts `user_id` as a required query/form/path param. No `Query("u_482")` defaults — they leak data to the demo user the moment any route becomes public.
 2. **Date ranges are inclusive on both ends.** If you accept `?to=2026-05-31`, transactions *on* May 31 must be included. Implement as `$lt next_day` or `$lte end_of_day`.
 3. **Outflow vs. inflow filters get a docstring.** `amount: {$lt: 0}` is "spending only." Future contributors will confuse this without a comment.
-4. **One resource per file in `app/api/`.** Group routes by domain (`transactions.py`, `aggregations.py`, `chat.py`), not by HTTP verb.
+4. **One resource per file in `app/api/`.** Group routes by domain (`transactions.py`, `aggregations.py`, `chat.py`, `budgets.py`, `inbox.py`, `ingest.py`), not by HTTP verb.
 
 ## Agent tool conventions
 
@@ -110,6 +127,21 @@ agent /chat  ──▶  FastAPI /chat proxy  ──▶  Next.js /api/chat  ─�
 - **Errors mid-stream:** close the connection; the client surfaces a retry affordance and the user re-sends.
 
 The proxy legs are transparent pass-throughs — they forward chunks as received, they don't buffer the full response. If we ever need structured events (tool-call traces, the cron nudge channel), that's a separate decision, not a change to this one.
+
+## Statement-ingest wire format (V4 SSE)
+
+Decided 2026-06-05 — the `POST /ingest/statement` endpoint is the **one deliberate exception** to the plain-text chat format. Bank-statement PDF upload goes through a multi-phase pipeline (multimodal Gemini extraction → categorization against `category_vocab` → merchant canonicalization → bulk insert tagged with content-addressed source hash for idempotent re-uploads) that takes 5-30s on a multi-page PDF. Without progress signals the user stares at a spinner and assumes the request hung.
+
+```
+PDF ──▶ Vercel /api/ingest/statement ──▶ FastAPI /ingest/statement ──▶ run_ingest_streaming(...)
+```
+
+- **Transport:** `Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`. Required for both nginx and Vercel's Node-runtime edge so each SSE frame flushes immediately.
+- **Frames:** one per pipeline phase — `received` → `dedupe` → `extracting` → `extracted` → `categorizing` → `saving` → `done`. The `done` frame's `data` payload is the same shape the pre-V4 JSON response used (inserted count, errors, source hash), so the frontend renders the same `StatementCard` once the stream terminates.
+- **Vercel proxy:** `frontend/app/api/ingest/statement/route.ts` manually pipes the upstream `ReadableStream` — pass-through, no buffering — to preserve frame-level latency.
+- **Limits:** 10 MB max PDF (enforced backend-side, returns 413); rejects non-`.pdf` extensions with a 400 pointing at `/ingest/csv` for CSV uploads.
+
+Why this is OK as an exception: the chat path streams free-form LLM tokens where framing is overhead. The statement path emits a fixed number of structured phase events where framing is exactly what the UI needs to render a checkpoint timeline.
 
 ## What's swappable
 
