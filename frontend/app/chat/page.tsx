@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import {
+  ArrowUp,
+  Loader2,
+  PieChart,
+  PiggyBank,
+  Sparkles,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { streamChat } from "@/lib/chat-stream";
 import { InterventionCard } from "@/components/chat/intervention-card";
@@ -20,16 +28,17 @@ type InterventionItem = {
 };
 type Message = ContentMessage | InterventionItem;
 
-const SUGGESTIONS = [
-  "How can you help me?",
-  "Show me my spending this month",
-  "Help me save money",
+const SUGGESTIONS: { text: string; icon: LucideIcon }[] = [
+  { text: "How can you help me?", icon: Sparkles },
+  { text: "Show me this month's spending", icon: TrendingUp },
+  { text: "Where is my money going?", icon: PieChart },
+  { text: "Help me save money", icon: PiggyBank },
 ];
 
 const WELCOME: ContentMessage = {
   id: "welcome",
   role: "assistant",
-  content: "Hi — I'm MoneyMind. What's on your mind?",
+  content: "Hi, I'm MoneyMind. What's on your mind?",
 };
 
 export default function ChatPage() {
@@ -49,7 +58,7 @@ export default function ChatPage() {
   // NOTE: previously we had an unmount cleanup that called
   // abortRef.current?.abort(). Removed because it was canceling in-flight
   // requests in prod when React's effect lifecycle fired the cleanup mid-
-  // stream — visible in DevTools as the chat request going to "(canceled)"
+  // stream, visible in DevTools as the chat request going to "(canceled)"
   // around 1.8s. Users can refresh to abort; we don't need fancier UX.
 
   async function send(text: string) {
@@ -88,7 +97,7 @@ export default function ChatPage() {
         );
       }
       // after each reply, surface any interventions the agent proposed.
-      // Dedup against what we've already rendered — the backend keeps a
+      // Dedup against what we've already rendered, since the backend keeps a
       // pending intervention in the list until the user accepts/declines,
       // so without this it would re-append on every turn.
       const pending = await fetchPendingInterventions();
@@ -119,7 +128,7 @@ export default function ChatPage() {
             ? {
                 ...m,
                 content:
-                  m.content + "\n\n(Connection lost — try again in a moment.)",
+                  m.content + "\n\n(Connection lost. Try again in a moment.)",
               }
             : m,
         ),
@@ -162,7 +171,7 @@ export default function ChatPage() {
   }
 
   return (
-    <AppShell activeHref="/chat">
+    <AppShell activeHref="/chat" glow={false}>
       <div className="mx-auto flex h-[calc(100svh-4rem)] w-full max-w-3xl flex-col">
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           <div className="flex flex-col gap-4">
@@ -186,16 +195,21 @@ export default function ChatPage() {
               ),
             )}
             {messages.length === 1 && (
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
                   <button
-                    key={s}
+                    key={s.text}
                     type="button"
-                    onClick={() => send(s)}
+                    onClick={() => send(s.text)}
                     disabled={streaming}
-                    className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2.5 text-left text-sm text-[color:var(--color-fg-muted)] transition-colors hover:border-[color:var(--color-accent)]/40 hover:bg-[color:var(--color-surface-hi)] hover:text-foreground disabled:opacity-50"
+                    className="group flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[color:var(--color-surface)]/50 px-4 py-3.5 text-left backdrop-blur-sm transition-colors hover:border-[color:var(--color-accent)]/40 hover:bg-[color:var(--color-surface-hi)]/60 disabled:opacity-50"
                   >
-                    {s}
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[color:var(--color-accent)]/10 text-[color:var(--color-accent)] ring-1 ring-inset ring-[color:var(--color-accent)]/20">
+                      <s.icon className="h-4 w-4" />
+                    </span>
+                    <span className="text-sm font-medium text-[color:var(--color-fg-muted)] transition-colors group-hover:text-[color:var(--color-fg)]">
+                      {s.text}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -203,7 +217,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur">
+        <div className="border-t border-white/[0.06] bg-[color:var(--color-bg)]/60 backdrop-blur-xl">
           <form
             onSubmit={onSubmit}
             className="mx-auto flex w-full items-end gap-2 px-4 py-3"
@@ -220,7 +234,7 @@ export default function ChatPage() {
               placeholder="Tell MoneyMind what's going on…"
               rows={1}
               disabled={streaming}
-              className="max-h-40 min-h-[44px] flex-1 resize-none rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-2.5 text-sm leading-6 outline-none transition-colors placeholder:text-zinc-500 focus:border-[color:var(--color-accent)] focus:ring-2 focus:ring-[color:var(--color-accent)]/20 disabled:opacity-60"
+              className="max-h-40 min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.08] bg-[color:var(--color-surface)]/60 px-4 py-2.5 text-sm leading-6 outline-none backdrop-blur-xl transition-colors placeholder:text-zinc-500 focus:border-[color:var(--color-accent)] focus:ring-2 focus:ring-[color:var(--color-accent)]/20 disabled:opacity-60"
             />
             <button
               type="submit"
@@ -249,7 +263,7 @@ function Bubble({ message }: { message: ContentMessage }) {
         className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-6 ${
           isUser
             ? "rounded-br-md bg-[color:var(--color-accent)] text-zinc-950"
-            : "rounded-bl-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-foreground"
+            : "rounded-bl-md border border-white/[0.08] bg-[color:var(--color-surface)]/60 text-foreground backdrop-blur-xl"
         }`}
       >
         {message.content || (
