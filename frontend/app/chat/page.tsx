@@ -15,12 +15,14 @@ import { AppShell } from "@/components/app-shell";
 import { streamChat } from "@/lib/chat-stream";
 import { InterventionCard } from "@/components/chat/intervention-card";
 import { StatementCard } from "@/components/chat/statement-card";
+import { ImportProgress } from "@/components/chat/import-progress";
 import type { Intervention, InterventionResponse } from "@/lib/interventions";
 import {
   fetchPendingInterventions,
   respondToIntervention,
 } from "@/lib/interventions";
 import { uploadStatement } from "@/lib/api";
+import type { IngestProgressEvent } from "@/lib/api";
 import type { IngestStatementResponse } from "@/lib/types";
 
 type Role = "user" | "assistant";
@@ -36,7 +38,22 @@ type StatementItem = {
   filename: string;
   result: IngestStatementResponse;
 };
-type Message = ContentMessage | InterventionItem | StatementItem;
+// Live progress timeline. While the upload is in-flight this morphs as
+// SSE events arrive; on `done` the parent swaps it for a StatementItem.
+type ImportProgressItem = {
+  id: string;
+  kind: "import-progress";
+  filename: string;
+  events: IngestProgressEvent[];
+  startedAt: number;
+  elapsedMs: number;
+  errorMessage?: string;
+};
+type Message =
+  | ContentMessage
+  | InterventionItem
+  | StatementItem
+  | ImportProgressItem;
 
 const SUGGESTIONS: { text: string; icon: LucideIcon }[] = [
   { text: "How can you help me?", icon: Sparkles },
@@ -199,29 +216,64 @@ export default function ChatPage() {
       return;
     }
 
-    // Surface the upload as a user-side bubble so the conversation makes
-    // sense ("I uploaded Statement.pdf" → agent's import-card reply).
+    // Surface the upload as a user bubble so the conversation reads
+    // naturally ("📎 Uploaded x.pdf" → live progress timeline → card).
     const userMsg: ContentMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: `📎 Uploaded ${file.name}`,
     };
-    const loadingId = crypto.randomUUID();
-    const loadingMsg: ContentMessage = {
-      id: loadingId,
-      role: "assistant",
-      content: "Reading your statement…",
+    const progressId = crypto.randomUUID();
+    const startedAt = Date.now();
+    const initialProgress: ImportProgressItem = {
+      id: progressId,
+      kind: "import-progress",
+      filename: file.name,
+      events: [],
+      startedAt,
+      elapsedMs: 0,
     };
-    setMessages((m) => [...m, userMsg, loadingMsg]);
+    setMessages((m) => [...m, userMsg, initialProgress]);
     setUploading(true);
 
+    // Tick elapsedMs every 250ms while the upload is live so the chip
+    // in the progress card updates and the user can SEE time passing
+    // (more reassuring than a frozen timer when Gemini takes 10s).
+    const tickHandle = window.setInterval(() => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === progressId && "kind" in m && m.kind === "import-progress"
+            ? { ...m, elapsedMs: Date.now() - startedAt }
+            : m,
+        ),
+      );
+    }, 250);
+
     try {
-      const result = await uploadStatement(file);
-      // Replace the "Reading…" bubble with a one-line summary + drop a
-      // structured card right below.
+      const result = await uploadStatement(file, {
+        onProgress: (event) => {
+          // Append the event to the progress item's events list.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === progressId && "kind" in m && m.kind === "import-progress"
+                ? { ...m, events: [...m.events, event] }
+                : m,
+            ),
+          );
+        },
+      });
+
+      window.clearInterval(tickHandle);
+
+      // Swap the progress item for a final summary bubble + StatementCard.
       const summary = result.duplicate_of_prior_upload
         ? `This statement was already imported. Here's the breakdown I have on file.`
         : `Imported ${result.inserted} transactions from your ${result.issuer || "statement"} (${result.period_start ?? ""} → ${result.period_end ?? ""}). Total spend ${formatTotal(result.total_spend)}. Check your dashboard for the bars.`;
+      const summaryMsg: ContentMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: summary,
+      };
       const cardItem: StatementItem = {
         id: crypto.randomUUID(),
         kind: "statement",
@@ -230,20 +282,18 @@ export default function ChatPage() {
       };
       setMessages((prev) =>
         prev.flatMap((m) =>
-          m.id === loadingId
-            ? [{ ...m, content: summary } as ContentMessage, cardItem]
-            : [m],
+          m.id === progressId ? [summaryMsg, cardItem] : [m],
         ),
       );
     } catch (err) {
+      window.clearInterval(tickHandle);
       const errMsg = (err as Error).message || "upload failed";
+      // Leave the progress card visible with its error state so the
+      // user can see WHICH step failed.
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === loadingId && !("kind" in m)
-            ? {
-                ...m,
-                content: `I couldn't read that statement (${errMsg}). Want to try a different file?`,
-              }
+          m.id === progressId && "kind" in m && m.kind === "import-progress"
+            ? { ...m, errorMessage: errMsg, elapsedMs: Date.now() - startedAt }
             : m,
         ),
       );
@@ -280,6 +330,18 @@ export default function ChatPage() {
                 return (
                   <div key={m.id} className="flex justify-start">
                     <StatementCard result={m.result} filename={m.filename} />
+                  </div>
+                );
+              }
+              if ("kind" in m && m.kind === "import-progress") {
+                return (
+                  <div key={m.id} className="flex justify-start">
+                    <ImportProgress
+                      filename={m.filename}
+                      events={m.events}
+                      errorMessage={m.errorMessage}
+                      elapsedMs={m.elapsedMs}
+                    />
                   </div>
                 );
               }

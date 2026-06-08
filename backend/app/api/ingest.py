@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.auth.clerk import AuthenticatedUser, current_user
 from app.db.client import get_database
 from app.ingestion.csv import parse_transactions_csv
-from app.ingestion.pipeline import run_ingest
+from app.ingestion.pipeline import run_ingest_streaming
 
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -50,16 +51,24 @@ async def ingest_csv(
 async def ingest_statement(
     file: UploadFile = File(...),
     user: AuthenticatedUser = Depends(current_user),
-) -> dict:
-    """V4 — bank-statement PDF upload.
+) -> StreamingResponse:
+    """V4 — bank-statement PDF upload, with **streaming progress events**.
 
     Multimodal Gemini extracts transactions, categorizes them against
     our vocab, runs the merchant canonicalizer for known merchants, and
     bulk-inserts into atlas.transactions tagged with a source hash so
     re-uploads dedupe to 0.
 
-    Returns a structured summary the frontend renders as a system card
-    in the chat thread.
+    Returns Server-Sent Events: one per pipeline phase
+    (received → dedupe → extracting → extracted → categorizing →
+    saving → done). The `done` frame's `data` is the same shape the
+    old JSON response used to be, so the frontend renders the same
+    StatementCard once the stream terminates.
+
+    Why streaming: Gemini extraction takes 5-30s on a multi-page PDF.
+    Without progress signals the user sees a spinner and assumes it
+    hung. Each phase event lets the UI render a checkpoint timeline
+    so the user can SEE where in the pipeline we are.
     """
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -77,24 +86,21 @@ async def ingest_statement(
         )
 
     db = get_database()
-    result = await run_ingest(
+    generator = run_ingest_streaming(
         pdf_bytes,
         user_id=user.user_id,
         source_name=file.filename,
         transactions=db.transactions,
     )
-
-    return {
-        "inserted": result.inserted,
-        "duplicate_of_prior_upload": result.duplicate_of_prior_upload,
-        "issuer": result.parsed.issuer,
-        "account_last4": result.parsed.account_last4,
-        "period_start": result.parsed.period_start.isoformat() if result.parsed.period_start else None,
-        "period_end": result.parsed.period_end.isoformat() if result.parsed.period_end else None,
-        "total_spend": round(result.total_spend, 2),
-        "by_category": {k: round(v, 2) for k, v in sorted(result.by_category.items(), key=lambda kv: -kv[1])},
-        "payment_count": result.payment_count,
-        "payment_total": round(result.payment_total, 2),
-        "warnings": result.parsed.warnings,
-        "source": result.parsed.source,
-    }
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        # Disable proxy buffering so each SSE frame flushes immediately.
+        # Required for both nginx (X-Accel-Buffering) AND Vercel's
+        # Node-runtime edge (Cache-Control: no-transform).
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

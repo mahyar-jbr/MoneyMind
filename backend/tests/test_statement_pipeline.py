@@ -19,7 +19,9 @@ from datetime import date, datetime
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
-from app.ingestion.pipeline import run_ingest
+import json
+
+from app.ingestion.pipeline import run_ingest, run_ingest_streaming
 from app.ingestion.statement_parser import StatementParseResult
 
 
@@ -249,6 +251,139 @@ async def test_empty_pdf_bytes_returns_clean_failure(transactions):
     # warned StatementParseResult with no docs.
     assert result.inserted == 0
     assert result.duplicate_of_prior_upload is False
+
+
+# ─── Streaming pipeline (SSE) ──────────────────────────────────────
+
+
+def _parse_sse_frames(raw_frames: list[str]) -> list[tuple[str, dict]]:
+    """Parse a list of SSE-formatted strings into (event, data) tuples."""
+    out: list[tuple[str, dict]] = []
+    for frame in raw_frames:
+        event = None
+        data = None
+        for line in frame.strip().split("\n"):
+            if line.startswith("event: "):
+                event = line[len("event: "):]
+            elif line.startswith("data: "):
+                data = json.loads(line[len("data: "):])
+        if event and data is not None:
+            out.append((event, data))
+    return out
+
+
+async def test_streaming_emits_full_phase_sequence(transactions):
+    """Happy path: received → dedupe(new) → extracting → extracted →
+    categorizing → saving → done. The `done` payload mirrors the
+    non-streaming response shape so the frontend renders the same card."""
+    fake = _fake_parser_factory(
+        docs=[
+            _doc("food.coffee", -6.77),
+            _doc("transport.gas", -28.91),
+        ],
+        skipped_payments=[
+            {
+                "date": datetime(2026, 4, 20),
+                "merchant": "PAYMENT RECEIVED - THANK YOU",
+                "merchant_canonical": "card_payment",
+                "amount": -800.00,
+                "currency": "CAD",
+                "reason": "payment_or_credit",
+            }
+        ],
+    )
+
+    frames = []
+    async for frame in run_ingest_streaming(
+        b"fake pdf bytes",
+        user_id="user_test",
+        source_name="Summary.pdf",
+        transactions=transactions,
+        parser=fake,
+    ):
+        frames.append(frame)
+
+    events = _parse_sse_frames(frames)
+    event_names = [e for e, _ in events]
+    assert event_names == [
+        "received", "dedupe", "dedupe", "extracting", "extracted",
+        "categorizing", "saving", "done",
+    ]
+    # `received` carries filename + size.
+    received_data = events[0][1]
+    assert received_data["filename"] == "Summary.pdf"
+    assert received_data["size_bytes"] == len(b"fake pdf bytes")
+    # `dedupe new` then `dedupe new` again — first frame is `checking`,
+    # second is `new` once the count_documents resolves to 0.
+    assert events[1][1]["status"] == "checking"
+    assert events[2][1]["status"] == "new"
+    # `extracted` carries period + counts.
+    extracted_data = events[4][1]
+    assert extracted_data["spend_count"] == 2
+    assert extracted_data["payment_count"] == 1
+    assert extracted_data["issuer"] == "American Express"
+    assert extracted_data["period_start"] == "2026-04-20"
+    # `done` is the final card payload.
+    done_data = events[7][1]
+    assert done_data["inserted"] == 2
+    assert done_data["duplicate_of_prior_upload"] is False
+    assert done_data["total_spend"] == 35.68
+    assert done_data["by_category"] == {"transport": 28.91, "food": 6.77}
+    assert done_data["payment_count"] == 1
+    assert done_data["payment_total"] == 800.00
+    # Docs landed in collection.
+    assert await transactions.count_documents({"user_id": "user_test"}) == 2
+
+
+async def test_streaming_duplicate_upload_short_circuits(transactions):
+    """Re-uploading the same bytes: received → dedupe(checking) →
+    dedupe(duplicate) → done. No extract/save events. Cached aggregates
+    surface in the `done` frame."""
+    fake = _fake_parser_factory(
+        docs=[_doc("food.coffee", -6.77), _doc("transport.gas", -28.91)],
+    )
+    # Prime the collection with the first upload.
+    async for _ in run_ingest_streaming(
+        b"identical", user_id="user_test", source_name="x.pdf",
+        transactions=transactions, parser=fake,
+    ):
+        pass
+
+    # Second upload of identical bytes.
+    frames = []
+    async for frame in run_ingest_streaming(
+        b"identical", user_id="user_test", source_name="x.pdf",
+        transactions=transactions, parser=fake,
+    ):
+        frames.append(frame)
+    events = _parse_sse_frames(frames)
+    event_names = [e for e, _ in events]
+    assert event_names == ["received", "dedupe", "dedupe", "done"]
+    assert events[2][1]["status"] == "duplicate"
+    assert events[2][1]["prior_count"] == 2
+    done_data = events[3][1]
+    assert done_data["duplicate_of_prior_upload"] is True
+    assert done_data["inserted"] == 0
+    assert done_data["by_category"] == {"transport": 28.91, "food": 6.77}
+
+
+async def test_streaming_extraction_failure_emits_error_event(transactions):
+    """LLM blow-up: received → dedupe → extracting → error (no done)."""
+
+    def _failing_parser(pdf_bytes, *, user_id, source_name, source_hash):
+        raise RuntimeError("gemini exploded")
+
+    frames = []
+    async for frame in run_ingest_streaming(
+        b"bytes", user_id="user_test", source_name="x.pdf",
+        transactions=transactions, parser=_failing_parser,
+    ):
+        frames.append(frame)
+    events = _parse_sse_frames(frames)
+    event_names = [e for e, _ in events]
+    assert event_names == ["received", "dedupe", "dedupe", "extracting", "error"]
+    assert events[-1][1]["step"] == "extracting"
+    assert "gemini exploded" in events[-1][1]["message"]
 
 
 async def test_llm_failure_returns_zero_inserted_with_warning(transactions):

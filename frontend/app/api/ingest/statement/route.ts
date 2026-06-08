@@ -2,18 +2,20 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { backendUrl } from "@/lib/backend";
 
-// V4 — Bank-statement PDF upload. Multimodal Gemini on the backend
-// extracts transactions + categorizes them + bulk-writes to Atlas.
-// The agent's tools read those rows on the next chat turn (no separate
-// agent-side ingest tool — by design).
+// V4 — Bank-statement PDF upload with **streaming progress**.
 //
-// Multipart pass-through: we forward the raw FormData body to the
-// backend with the user's Clerk JWT. Vercel's Node runtime preserves
-// the multipart boundary if we re-emit the body as-is.
+// Multipart in, Server-Sent Events out. Mirrors the /api/chat proxy
+// pattern: manual ReadableStream pipe so each SSE frame the backend
+// emits flushes to the browser immediately, instead of being buffered
+// by Vercel's Node serverless runtime.
+//
+// Frames pass through verbatim — the frontend parses them. The final
+// frame `event: done` carries the StatementCard payload.
 export const runtime = "nodejs";
-// Bank PDFs are tiny but Gemini's extraction call can take 5-30s on a
-// busy multi-page statement; default 10s would 504.
+// Gemini extraction can take 5-30s on a multi-page statement; default
+// 10s timeout would 504 silently. 300s = Vercel Hobby ceiling.
 export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const { userId, getToken } = await auth();
@@ -25,8 +27,8 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  // Read the multipart body once. We re-emit it as a new FormData so the
-  // backend receives a clean multipart payload with our headers, not
+  // Read the multipart body once. Re-emit as a new FormData so the
+  // backend gets a clean multipart payload with our headers, not
   // Next's framework-mangled version.
   let formData: FormData;
   try {
@@ -49,22 +51,53 @@ export async function POST(req: NextRequest) {
   upstreamForm.append("file", file, file.name);
 
   const url = backendUrl("/ingest/statement");
+  let upstream: Response;
   try {
-    const res = await fetch(url, {
+    upstream = await fetch(url, {
       method: "POST",
       cache: "no-store",
       headers: { Authorization: `Bearer ${token}` },
       body: upstreamForm,
     });
-    const body = await res.json().catch(() => ({ error: "backend returned non-JSON" }));
-    if (!res.ok) {
-      return NextResponse.json(body, { status: res.status });
-    }
-    return NextResponse.json(body);
   } catch {
-    return NextResponse.json(
-      { error: "backend unreachable" },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "backend unreachable" }, { status: 502 });
   }
+  if (!upstream.ok || !upstream.body) {
+    const body = await upstream
+      .json()
+      .catch(() => ({ error: `backend ${upstream.status}` }));
+    return NextResponse.json(body, { status: upstream.status });
+  }
+
+  // Manual ReadableStream pipe — same shape as the /api/chat proxy.
+  // Without this, Vercel's serverless Node runtime buffers the entire
+  // response body before flushing, and the user sees zero progress.
+  const reader = upstream.body.getReader();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() {
+      reader.cancel().catch(() => {});
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+      Connection: "keep-alive",
+    },
+  });
 }
